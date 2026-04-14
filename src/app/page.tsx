@@ -310,14 +310,26 @@ export default function Home() {
                   <source src={PREVIEW_VIDEO_URL} type="video/mp4" />
                   Your browser does not support the video tag.
                 </video>
+
+                {/* Play/Pause toggle — bottom-left */}
                 <button
                   id="toggleBtn"
                   onClick={togglePreviewPlayPause}
-                  className="absolute bottom-4 right-4 bg-black/60 text-white border-none p-3 rounded-full cursor-pointer text-lg z-10 pointer-events-auto"
-                  style={{ zIndex: 10 }}
+                  className="absolute bottom-4 left-4 bg-black/60 text-white border-none p-3 rounded-full cursor-pointer text-lg z-10 pointer-events-auto"
                 >
                   &#9654;
                 </button>
+
+                {/* Remix Now CTA — top-center */}
+                <div className="absolute top-6 left-0 right-0 flex justify-center z-20">
+                  <button
+                    onClick={() => scrollToSection('creation-studio')}
+                    className="px-8 py-3 rounded-full font-bold text-white text-sm tracking-wide shadow-xl"
+                    style={{ background: 'linear-gradient(135deg, #b60055, #e4006c)' }}
+                  >
+                    ✨ Remix Now
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -396,7 +408,7 @@ export default function Home() {
             {/* Step 2: Full Body */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-headline text-lg font-bold">2.Upload Full Body Photo</h3>
+                <h3 className="font-headline text-lg font-bold">2. Upload Full Body Photo</h3>
                 <span className="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-full font-bold uppercase tracking-wider">Required</span>
               </div>
               <div className="relative group cursor-pointer overflow-hidden rounded-xl bg-surface-container-low aspect-[3/4] flex flex-col items-center justify-center border-2 border-dashed border-outline-variant/30 hover:border-primary/50 transition-colors" onClick={() => { if (!fullBodyCameraMode) fullBodyInputRef.current?.click(); }}>
