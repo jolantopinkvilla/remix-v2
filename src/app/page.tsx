@@ -1,193 +1,175 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import Webcam from "react-webcam";
+import { useState, useRef, useEffect } from "react";
 import { useTracking } from "@/hooks/useTracking";
-import { 
-  Upload, 
-  Camera, 
-  Image as ImageIcon, 
-  Video, 
-  Download, 
-  Share2, 
-  RefreshCw, 
-  Wand2,
-  AlertCircle,
-  CheckCircle2,
-  X,
-  Pause,
-  PlayCircle,
-  CloudUpload,
-  ChevronLeft,
-  ChevronRight
-} from "lucide-react";
-import dynamic from "next/dynamic";
-
-const WebcamCapture = dynamic(() => import("@/app/WebcamCapture"), {
-  ssr: false,
-  loading: () => <p className="text-slate-400 text-sm">Loading camera...</p>,
-});
+import Webcam from "react-webcam";
+import { getS3Url } from "@/lib/s3";
 
 type ViewState = "input" | "processing" | "result";
-type InputMethod = "upload" | "camera";
 
-// Video Templates — all displayed in 9:16 portrait containers, object-cover fills the frame
-const videoTemplates = [
+const bedTypes = [
   {
-    id: "cinematic",
-    name: "Cinematic",
-    description: "Professional film-style video",
-    thumbnailVideo: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-    aspectRatio: "9:16",
-    resolution: "1280x720"
+    id: "1",
+    name: "Mango Juice",
+    thumbnail: "https://pv22-prod-eng-s3.s3.us-east-1.amazonaws.com/demo/bed_mango_juice_small.png"
   },
   {
-    id: "social",
-    name: "Social Media",
-    description: "Vertical format for reels/stories",
-    thumbnailVideo: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
-    videoUrl: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4",
-    aspectRatio: "9:16",
-    resolution: "1280x720"
+    id: "2",
+    name: "Honey Comb",
+    thumbnail: "https://pv22-prod-eng-s3.s3.us-east-1.amazonaws.com/demo/bed_honey_comb_small.png"
   },
   {
-    id: "business",
-    name: "Business",
-    description: "Corporate presentation style",
-    thumbnailVideo: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    aspectRatio: "9:16",
-    resolution: "854x480"
-  },
-  {
-    id: "artistic", 
-    name: "Artistic",
-    description: "Creative effects and transitions",
-    thumbnailVideo: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    aspectRatio: "9:16",
-    resolution: "640x360"
-  },
-  {
-    id: "minimal",
-    name: "Minimal",
-    description: "Clean and simple animations",
-    thumbnailVideo: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    aspectRatio: "9:16",
-    resolution: "426x240"
+    id: "3",
+    name: "Jewellery",
+    thumbnail: "https://pv22-prod-eng-s3.s3.us-east-1.amazonaws.com/demo/bed_jewellery_small.png"
   }
 ];
 
+const PREVIEW_VIDEO_URL = "https://pv22-prod-eng-s3.s3.us-east-1.amazonaws.com/demo/bed-template-5mb.mp4";
+
 export default function Home() {
   const [viewState, setViewState] = useState<ViewState>("input");
-  const [inputMethod, setInputMethod] = useState<InputMethod>("upload");
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [fullBodyFile, setFullBodyFile] = useState<File | null>(null);
+  const [fullBodyPreview, setFullBodyPreview] = useState<string | null>(null);
+  const [selectedBedType, setSelectedBedType] = useState(bedTypes[0]);
   const [error, setError] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
-  const [videoProgress, setVideoProgress] = useState(0);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState(videoTemplates[0]);
-  const [hoveredVideo, setHoveredVideo] = useState<string | null>(null);
+  const [videoProgress, setVideoProgress] = useState(0);
 
-  const [isMuted, setIsMuted] = useState(false);
+  // Camera states
+  const [selfieCameraMode, setSelfieCameraMode] = useState(false);
+  const [fullBodyCameraMode, setFullBodyCameraMode] = useState(false);
+  const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
+
+  // Result visibility — hidden until user successfully triggers generation
+  const [resultVisible, setResultVisible] = useState(false);
 
   const { trackAction } = useTracking();
-  const webcamRef = useRef<Webcam>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const carouselRef = useRef<HTMLDivElement>(null);
+  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const fullBodyInputRef = useRef<HTMLInputElement>(null);
+
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const scrollCarousel = (direction: 'left' | 'right') => {
-    if (carouselRef.current) {
-      const scrollAmount = 120;
-      carouselRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
+  const selfieWebcamRef = useRef<Webcam>(null);
+  const fullBodyWebcamRef = useRef<Webcam>(null);
 
   useEffect(() => {
     trackAction("visit");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Navigation scroll effect
+  useEffect(() => {
+    const sections = [
+      { id: null, navSection: 'home', threshold: 0 },
+      { id: 'creation-studio', navSection: 'create', threshold: 0.3 },
+      { id: 'remix-result', navSection: 'result', threshold: 0.3 },
+    ];
+
+    function updateActiveNav() {
+      const scrollY = window.scrollY + window.innerHeight * 0.5;
+      let active = 'home';
+
+      sections.forEach(({ id, navSection }) => {
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (el && el.offsetTop <= scrollY) active = navSection;
+      });
+
+      document.querySelectorAll('.nav-item').forEach((el) => {
+        const navItem = el as HTMLElement;
+        const isActive = navItem.dataset.section === active;
+
+        if (isActive) {
+          navItem.classList.add('bg-gradient-to-tr', 'from-[#b60055]', 'to-[#e4006c]', 'text-white');
+          navItem.classList.remove('text-[#1b1c1c]');
+        } else {
+          navItem.classList.remove('bg-gradient-to-tr', 'from-[#b60055]', 'to-[#e4006c]', 'text-white');
+          navItem.classList.add('text-[#1b1c1c]');
+        }
+      });
+    }
+
+    window.addEventListener('scroll', updateActiveNav);
+    updateActiveNav();
+
+    return () => window.removeEventListener('scroll', updateActiveNav);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'selfie' | 'fullBody') => {
     setError(null);
     if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      if (selectedFile.size > 5 * 1024 * 1024) {
+      const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) {
         setError("File size exceeds the 5MB limit.");
         return;
       }
-      if (!selectedFile.type.startsWith("image/")) {
+      if (!file.type.startsWith("image/")) {
         setError("Please select a valid image file.");
         return;
       }
-      setFile(selectedFile);
-      setPreviewUrl(URL.createObjectURL(selectedFile));
+
+      if (type === 'selfie') {
+        setSelfieFile(file);
+        setSelfiePreview(URL.createObjectURL(file));
+      } else {
+        setFullBodyFile(file);
+        setFullBodyPreview(URL.createObjectURL(file));
+      }
     }
   };
 
-  const captureCamera = useCallback(() => {
-    setError(null);
-    const imageSrc = webcamRef.current?.getScreenshot();
-    if (imageSrc) {
-      fetch(imageSrc)
-        .then((res) => res.blob())
-        .then((blob) => {
-          const capturedFile = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
-          setFile(capturedFile);
-          setPreviewUrl(imageSrc);
-        })
-        .catch(() => setError("Failed to process camera image."));
+  const clearFile = (type: 'selfie' | 'fullBody') => {
+    if (type === 'selfie') {
+      setSelfieFile(null);
+      setSelfiePreview(null);
+      if (selfieInputRef.current) selfieInputRef.current.value = "";
+    } else {
+      setFullBodyFile(null);
+      setFullBodyPreview(null);
+      if (fullBodyInputRef.current) fullBodyInputRef.current.value = "";
     }
-  }, [webcamRef]);
-
-  const clearSelection = () => {
-    setPreviewUrl(null);
-    setError(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleGenerate = async () => {
-    if (!file) return;
+    if (!selfieFile || !fullBodyFile || !selectedBedType) return;
+
     setError(null);
+    setResultVisible(true);
     setViewState("processing");
     setProgress(0);
 
+    // Scroll to result section immediately (processing indicator lives inside it)
+    scrollToSection('remix-result');
+
     const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) {
+      setProgress((prev) => {
+        if (prev >= 100) {
           clearInterval(progressInterval);
-          return 90;
+          return 100;
         }
         return prev + 10;
       });
     }, 500);
 
-    try {
-      trackAction("upload");
-
-      // Simulate generation delay — swap this block for a real API call when ready
-      await new Promise(res => setTimeout(res, 3000));
-
+    setTimeout(() => {
       clearInterval(progressInterval);
-      setProgress(100);
-
-      // Use the selected template's dummy video
-      setVideoUrl(selectedTemplate.videoUrl);
+      setVideoUrl(PREVIEW_VIDEO_URL);
       setViewState("result");
       setIsPlaying(true);
-    } catch (err) {
-      clearInterval(progressInterval);
-      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
-      setViewState("input");
-    }
+      scrollToSection('remix-result');
+    }, 5000);
   };
 
   const handleDownload = () => {
@@ -195,7 +177,7 @@ export default function Home() {
     if (videoUrl) {
       const a = document.createElement("a");
       a.href = videoUrl;
-      a.download = "pinkvilla-ai-video.mp4";
+      a.download = "pinkvilla-remix-video.mp4";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -207,8 +189,8 @@ export default function Home() {
     if (navigator.share && videoUrl) {
       try {
         await navigator.share({
-          title: "Pinkvilla Generated Video",
-          text: "Check out my image transformed into a video using Pinkvilla!",
+          title: "Pinkvilla Remix Video",
+          text: "Check out my remix video created with Pinkvilla!",
           url: videoUrl,
         });
       } catch (err) {
@@ -218,15 +200,6 @@ export default function Home() {
       navigator.clipboard.writeText(videoUrl || "");
       alert("Link copied to clipboard!");
     }
-  };
-
-  const resetAll = () => {
-    setViewState("input");
-    clearSelection();
-    setVideoUrl(null);
-    setProgress(0);
-    setVideoProgress(0);
-    setIsPlaying(false);
   };
 
   const togglePlayPause = () => {
@@ -242,478 +215,439 @@ export default function Home() {
     }
   };
 
-  const toggleMute = () => {
-    const video = videoRef.current;
+  const togglePreviewPlayPause = () => {
+    const video = previewVideoRef.current;
     if (video) {
-      video.muted = !video.muted;
-      setIsMuted(video.muted);
+      video.paused ? video.play() : video.pause();
+    }
+  };
+
+  const resetAll = () => {
+    setViewState("input");
+    clearFile('selfie');
+    clearFile('fullBody');
+    setVideoUrl(null);
+    setProgress(0);
+    setVideoProgress(0);
+    setIsPlaying(false);
+    setResultVisible(false);
+  };
+
+  // Camera functions
+  const capturePhoto = (type: 'selfie' | 'fullBody') => {
+    const webcamRef = type === 'selfie' ? selfieWebcamRef : fullBodyWebcamRef;
+    const imageSrc = webcamRef.current?.getScreenshot();
+
+    if (imageSrc) {
+      fetch(imageSrc)
+        .then(res => res.blob())
+        .then(blob => {
+          const file = new File([blob], `${type}-capture.jpg`, { type: 'image/jpeg' });
+          if (type === 'selfie') {
+            setSelfieFile(file);
+            setSelfiePreview(imageSrc);
+            setSelfieCameraMode(false);
+          } else {
+            setFullBodyFile(file);
+            setFullBodyPreview(imageSrc);
+            setFullBodyCameraMode(false);
+          }
+        });
+    }
+  };
+
+  const toggleCameraMode = async (type: 'selfie' | 'fullBody') => {
+    if (cameraPermission === null) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+        setCameraPermission(true);
+      } catch (err) {
+        setCameraPermission(false);
+        setError("Camera access denied. Please use file upload instead.");
+        return;
+      }
+    }
+
+    if (type === 'selfie') {
+      setSelfieCameraMode(!selfieCameraMode);
+      setFullBodyCameraMode(false);
+    } else {
+      setFullBodyCameraMode(!fullBodyCameraMode);
+      setSelfieCameraMode(false);
     }
   };
 
   return (
-    <div className="overflow-x-hidden w-full max-w-[100vw]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-primary/10 w-full">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 py-4">
-          <div className="flex items-center gap-8">
-            <div className="font-black text-2xl text-primary">Pinkvilla</div>
-          </div>
-        </div>
-      </header>
+    <div className="bg-surface text-on-surface font-body antialiased overflow-x-hidden">
+      {/* TOP NAV */}
+      <nav className="fixed top-0 w-full z-50 bg-[#faf9f9]/80 backdrop-blur-xl flex flex-col items-center justify-center px-6 py-4 text-center">
+        <h1 className="font-headline text-2xl font-black text-[#b60055] tracking-tighter uppercase">
+          PINKVILLA
+        </h1>
+        <h2 className="text-sm text-gray-600">
+          Transform your images into Viral Videos
+        </h2>
+      </nav>
 
-      <main className="flex-1 w-full overflow-x-hidden">
-        {/* Hero Section */}
-        <section className="relative px-4 py-8 md:py-20 overflow-hidden w-full">
-          <div className="mx-auto max-w-5xl text-center">
-            <h1 className="text-3xl font-black leading-[1.1] tracking-tight text-black md:text-6xl">
-              Transform Your Images into{" "}
-              <span className="text-primary">Viral Videos</span>
-            </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-slate-600 dark:text-slate-400 px-2">
-              Create stunning AI-powered animations from your photos in seconds. Professional cinematic results with one click.
-            </p>
-          </div>
-          <div className="absolute -z-10 top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-full opacity-20 dark:opacity-10 pointer-events-none">
-            <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/50 to-transparent blur-3xl rounded-full"></div>
+      {/* MAIN CONTENT */}
+      <main className="pt-24 pb-32 max-w-lg mx-auto">
+        {/* HERO SECTION */}
+        <section className="px-4 flex flex-col items-center mb-10">
+          <div className="w-full max-w-md mx-auto relative group">
+            <div className="aspect-[9/16] w-full rounded-xl overflow-hidden bg-surface-container-low shadow-2xl relative">
+              <div className="video-container relative w-full h-full">
+                <video
+                  ref={previewVideoRef}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  controls
+                  className="w-full h-full object-cover"
+                  style={{ minHeight: '100%' }}
+                >
+                  <source src={PREVIEW_VIDEO_URL} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+                <button
+                  id="toggleBtn"
+                  onClick={togglePreviewPlayPause}
+                  className="absolute bottom-4 right-4 bg-black/60 text-white border-none p-3 rounded-full cursor-pointer text-lg z-10 pointer-events-auto"
+                  style={{ zIndex: 10 }}
+                >
+                  &#9654;
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* Main Content */}
-        <section className="mx-auto mb-20 max-w-5xl w-full px-3 sm:px-6">
-          <div className="grid gap-8 lg:grid-cols-12 w-full min-w-0">
-            {/* Left Column - Controls */}
-            <div className="lg:col-span-5 space-y-6 min-w-0 w-full">
-              {/* Upload Area */}
-              <div className={`rounded-2xl border-2 border-dashed border-primary/20 bg-white p-4 sm:p-8 shadow-sm backdrop-blur-sm w-full min-w-0 overflow-hidden ${viewState === 'result' ? 'opacity-50 pointer-events-none' : ''}`}>
-                <h3 className="text-lg font-bold mb-4">Step 1: Upload Source</h3>
+        {/* DIVIDER */}
+        <div className="section-divider px-4 mt-12">
+          <span className="font-label text-[0.6rem] font-black uppercase tracking-[0.2em] text-primary whitespace-nowrap">Creation your Remix</span>
+        </div>
 
-                {previewUrl ? (
-                  <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-gray-100 border border-gray-300">
-                    <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
+        {/* CREATION STUDIO */}
+        <section className="px-6 scroll-mt-24" id="creation-studio">
+          <div className="space-y-10">
+            {/* Step 1: Selfie */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-headline text-lg font-bold">1. Upload Selfie</h3>
+                <span className="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-full font-bold uppercase tracking-wider">Required</span>
+              </div>
+              <div className="relative group cursor-pointer overflow-hidden rounded-xl bg-surface-container-low aspect-square flex flex-col items-center justify-center border-2 border-dashed border-outline-variant/30 hover:border-primary/50 transition-colors" onClick={() => { if (!selfieCameraMode) selfieInputRef.current?.click(); }}>
+                {/* Toggle — always visible */}
+                <div className="absolute top-4 inset-x-0 z-30 flex justify-center" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-full shadow-sm border border-outline-variant/20">
                     <button
-                      onClick={clearSelection}
-                      className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-white border border-gray-300 rounded-full text-gray-700 backdrop-blur transition-all"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                      onClick={() => { setSelfieCameraMode(false); selfieInputRef.current?.click(); }}
+                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${!selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
+                      type="button"
+                    >Upload</button>
+                    <button
+                      onClick={() => toggleCameraMode('selfie')}
+                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
+                      type="button"
+                    >Camera</button>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Method Selection */}
-                    <div className="flex p-1 bg-gray-100 rounded-xl">
-                      <button
-                        onClick={() => setInputMethod("upload")}
-                        className={`flex-1 py-2 px-3 flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all ${
-                          inputMethod === "upload"
-                            ? "bg-white text-primary shadow-sm"
-                            : "text-gray-600 hover:text-gray-800"
-                        }`}
-                      >
-                        <Upload className="w-4 h-4" />
-                        Upload
-                      </button>
-                      <button
-                        onClick={() => setInputMethod("camera")}
-                        className={`flex-1 py-2 px-3 flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-all ${
-                          inputMethod === "camera"
-                            ? "bg-white text-primary shadow-sm"
-                            : "text-gray-600 hover:text-gray-800"
-                        }`}
-                      >
-                        <Camera className="w-4 h-4" />
-                        Camera
+                </div>
+
+                {selfieCameraMode ? (
+                  <div className="absolute inset-0 w-full h-full">
+                    <Webcam
+                      ref={selfieWebcamRef}
+                      screenshotFormat="image/jpeg"
+                      className="w-full h-full object-cover"
+                      videoConstraints={{ width: { ideal: 1280 }, height: { ideal: 960 }, facingMode: "user" }}
+                    />
+                    <div className="absolute bottom-4 inset-x-0 z-20 flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => capturePhoto('selfie')} className="px-6 py-3 rounded-full bg-primary text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform" type="button">
+                        <span className="material-symbols-outlined">camera</span>
                       </button>
                     </div>
+                  </div>
+                ) : (
+                  <>
+                    <img className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-30 transition-opacity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASSArI542y9TNuwyWq3MDggjuuLB2IHCbZ56etmYUzWvuaxZGqJvM5Hu9A_368BYObGjndN8zNDZ8jFRB1ATyJsREqANCOtGxGUrMgOHhfnR9b74DRiBwZzEClmg3Muaea2JZ278EUlGSfWQ6GR7FOeoIPsGrWPVA1nODoQ9NBPQeV_jgW15zuHP647VvvjNNr7ZVUewQlY0ZlK1ESA9xwrZWlc-bUEph21vVcJYbG8H25OA3Mm-YX5Q17CdQKfS9LMhH6Yhc6o-TV" alt="Portrait upload background" />
+                    {selfiePreview ? (
+                      <>
+                        <img src={selfiePreview} alt="Selfie preview" className="absolute inset-0 w-full h-full object-cover" />
+                        <button onClick={(e) => { e.stopPropagation(); clearFile('selfie'); }} className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 backdrop-blur transition-all">
+                          <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="relative z-10 flex flex-col items-center text-center p-6">
+                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-xl mb-4 group-hover:scale-110 duration-200 transition-transform">
+                          <span className="material-symbols-outlined text-primary text-3xl">add_a_photo</span>
+                        </div>
+                        <p className="font-semibold text-on-surface-variant">Upload Selfie</p>
+                        <p className="text-xs text-secondary mt-1">High-res, clear facial features</p>
+                      </div>
+                    )}
+                  </>
+                )}
+                <input ref={selfieInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, 'selfie')} />
+              </div>
+            </div>
 
-                    {/* Upload/Camera Interface */}
-                    {inputMethod === "upload" ? (
-                      <div
-                        className="flex flex-col items-center justify-center gap-4 text-center py-10 border-2 border-dashed border-primary/10 rounded-xl hover:bg-primary/5 transition-colors cursor-pointer group"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        <div className="h-16 w-16 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
-                          <CloudUpload className="w-8 h-8" />
+            {/* Step 2: Full Body */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-headline text-lg font-bold">2.Upload Full Body Photo</h3>
+                <span className="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-full font-bold uppercase tracking-wider">Required</span>
+              </div>
+              <div className="relative group cursor-pointer overflow-hidden rounded-xl bg-surface-container-low aspect-[3/4] flex flex-col items-center justify-center border-2 border-dashed border-outline-variant/30 hover:border-primary/50 transition-colors" onClick={() => { if (!fullBodyCameraMode) fullBodyInputRef.current?.click(); }}>
+                {/* Toggle — always visible */}
+                <div className="absolute top-4 inset-x-0 z-30 flex justify-center" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-full shadow-sm border border-outline-variant/20">
+                    <button
+                      onClick={() => { setFullBodyCameraMode(false); fullBodyInputRef.current?.click(); }}
+                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${!fullBodyCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
+                      type="button"
+                    >Upload</button>
+                    <button
+                      onClick={() => toggleCameraMode('fullBody')}
+                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all ${fullBodyCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
+                      type="button"
+                    >Camera</button>
+                  </div>
+                </div>
+
+                {fullBodyCameraMode ? (
+                  <div className="absolute inset-0 w-full h-full">
+                    <Webcam
+                      ref={fullBodyWebcamRef}
+                      screenshotFormat="image/jpeg"
+                      className="w-full h-full object-cover"
+                      videoConstraints={{ width: { ideal: 1280 }, height: { ideal: 960 }, facingMode: "user" }}
+                    />
+                    <div className="absolute bottom-4 inset-x-0 z-20 flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => capturePhoto('fullBody')} className="px-6 py-3 rounded-full bg-primary text-white font-bold text-sm shadow-lg hover:scale-105 transition-transform" type="button">
+                        <span className="material-symbols-outlined">camera</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <img className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-30 transition-opacity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBboWPPiJcYl6y5uAuqudk-U47I5bqaxEiF5o03YfW1Iprb3yB5AfVNFlmL_7WoMC3Q05MCdfXI0fhnPyRLbmokhpvgLTdL2SaxhJ1vFF2mOemiXaKo6Q_gLs5_57gSjYTDWOeN-n2v4IB4UrClDDy_JvLJLCMMx_K090ZtptqxofgG56LhsMTYePjk90Ep5R-AQL9YpN13mnfqTf30jTadxAA41F0d_57TdhRpOfbxqsizrpl3YmBB8qF3pyMg_MG31S_METTvOqKL" alt="Full body stance upload background" />
+                    {fullBodyPreview ? (
+                      <>
+                        <img src={fullBodyPreview} alt="Full body preview" className="absolute inset-0 w-full h-full object-cover" />
+                        <button onClick={(e) => { e.stopPropagation(); clearFile('fullBody'); }} className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-white rounded-full text-gray-700 backdrop-blur transition-all">
+                          <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="relative z-10 flex flex-col items-center text-center p-6">
+                        <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-xl mb-4 group-hover:scale-110 duration-200 transition-transform">
+                          <span className="material-symbols-outlined text-primary text-3xl">accessibility_new</span>
                         </div>
-                        <div className="space-y-1">
-                          <p className="font-bold text-gray-900">Select an image</p>
-                          <p className="text-xs text-gray-500">JPG, PNG or WebP (Max 5MB)</p>
-                        </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleFileChange}
-                        />
+                        <p className="font-semibold text-on-surface-variant">Full Body Shot</p>
+                        <p className="text-xs text-secondary mt-1">Showcase your full outfit and pose</p>
+                      </div>
+                    )}
+                  </>
+                )}
+                <input ref={fullBodyInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e, 'fullBody')} />
+              </div>
+            </div>
+
+            {/* Step 3: Bed Type */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-headline text-lg font-bold">3. Select Bed Type</h3>
+                <span className="text-[10px] bg-secondary/10 text-secondary px-2 py-1 rounded-full font-bold uppercase tracking-wider">Selection</span>
+              </div>
+              <div className="space-y-4">
+                {bedTypes.map((bedType) => {
+                  const isSelected = selectedBedType.id === bedType.id;
+                  return (
+                    <label
+                      key={bedType.id}
+                      className={`flex items-center p-4 rounded-xl shadow-sm cursor-pointer hover:bg-surface-container transition-all ring-1 ${
+                        isSelected ? 'ring-primary bg-primary/5' : 'ring-outline-variant/20 bg-surface-container-lowest'
+                      }`}
+                    >
+                      <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
+                        <img className="w-full h-full object-cover" src={bedType.thumbnail.replace('s3://', 'https://s3.amazonaws.com/')} alt={bedType.name} />
+                      </div>
+                      <p className="ml-4 flex-grow font-bold font-headline text-on-surface">{bedType.name}</p>
+                      <input
+                        type="radio"
+                        name="video_base"
+                        value={bedType.id}
+                        checked={isSelected}
+                        onChange={() => setSelectedBedType(bedType)}
+                        className="accent-primary w-5 h-5 flex-shrink-0 cursor-pointer"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Generate CTA */}
+            <div className="pt-2 pb-4">
+              <button
+                onClick={handleGenerate}
+                disabled={!selfieFile || !fullBodyFile}
+                className="w-full py-5 rounded-xl editorial-gradient text-white font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>Generate your Remix Video</span>
+                <span className="material-symbols-outlined">auto_awesome</span>
+              </button>
+              <p className="text-center mt-4 text-secondary text-[11px] uppercase tracking-widest font-bold opacity-60">Est. processing time: 5-7 minutes</p>
+            </div>
+          </div>
+        </section>
+
+        {/* RESULT SECTION — only rendered after Generate is clicked */}
+        {resultVisible && (
+          <>
+            {/* DIVIDER */}
+            <div className="section-divider px-4 mt-12">
+              <span className="font-label text-[0.6rem] font-black uppercase tracking-[0.2em] text-primary whitespace-nowrap">Remix Ready</span>
+            </div>
+
+            {/* REMIX RESULT */}
+            <section className="px-4 flex flex-col items-center scroll-mt-24" id="remix-result">
+              <div className="w-full mb-6 text-center">
+                <span className="font-label text-[0.65rem] uppercase tracking-[0.1em] font-bold text-primary mb-2 block">GENERATED BY PINKVILLA</span>
+                <h2 className="font-headline text-3xl font-extrabold tracking-tight text-on-surface">Your Remix Video</h2>
+                <p className="text-on-surface-variant text-sm mt-1">
+                  {viewState === "processing" ? "Generating your video..." : videoUrl ? "Ready to share with the world" : "Upload your photos above to get started"}
+                </p>
+              </div>
+
+              {/* Processing indicator */}
+              {viewState === "processing" && (
+                <div className="w-full mb-6" id="processing-section">
+                  <div className="rounded-2xl bg-white p-6 shadow-xl shadow-primary/5 border border-primary/5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold">Active Task</h3>
+                      <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded">ID: #PV-88291</span>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium">AI is crafting your video...</span>
+                        <span className="font-bold text-primary">{progress}%</span>
+                      </div>
+                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-primary/10">
+                        <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }}></div>
+                      </div>
+                      <p className="text-xs text-gray-500 italic">Processing frames and applying high-fidelity cinematic effects...</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Video Player */}
+              <div className="relative w-full max-w-[320px] mx-auto aspect-[9/16] rounded-xl overflow-hidden shadow-2xl bg-surface-container-highest group">
+                {videoUrl ? (
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    autoPlay
+                    loop
+                    playsInline
+                    className="w-full h-full object-cover"
+                    onTimeUpdate={(e) => {
+                      const video = e.currentTarget;
+                      if (video.duration) {
+                        setVideoProgress((video.currentTime / video.duration) * 100);
+                      }
+                    }}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-surface-container-low">
+                    {viewState === "processing" ? (
+                      <div className="flex flex-col items-center gap-4 p-8 text-center">
+                        <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+                        <p className="text-sm font-medium text-on-surface-variant">Generating your video...</p>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center text-center py-10 border-2 border-dashed border-primary/10 rounded-xl">
-                        {typeof window !== 'undefined' ? (
-                          <div className="w-full space-y-4">
-                            <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-gray-100">
-                              <Webcam
-                                ref={webcamRef}
-                                audio={false}
-                                screenshotFormat="image/jpeg"
-                                videoConstraints={{ facingMode: "user" }}
-                                className="w-full h-full object-cover"
-                              />
-                              <div className="absolute bottom-4 w-full flex justify-center">
-                                <button
-                                  onClick={captureCamera}
-                                  className="w-14 h-14 rounded-full bg-primary flex items-center justify-center border-4 border-white shadow-xl hover:scale-105 transition-transform"
-                                >
-                                  <Camera className="w-6 h-6 text-white" />
-                                </button>
-                              </div>
-                            </div>
-                            <p className="text-xs text-gray-500">Click to capture photo</p>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center p-8">
-                            <Camera className="w-16 h-16 text-gray-400 mb-4" />
-                            <p className="text-gray-400 text-sm">Camera not available in production</p>
-                            <p className="text-gray-500 text-xs mt-2">Please upload an image file instead</p>
-                          </div>
-                        )}
+                      <div className="flex flex-col items-center gap-3 p-8 text-center">
+                        <span className="material-symbols-outlined text-5xl text-outline-variant">video_file</span>
+                        <p className="text-sm text-on-surface-variant">Your generated video will appear here</p>
                       </div>
                     )}
                   </div>
                 )}
+                <div className="absolute inset-0 bg-gradient-to-t from-on-surface/60 to-transparent opacity-80 pointer-events-none"></div>
 
-                {/* Template Selection Carousel */}
-                {previewUrl && (
-                  <div className="space-y-4 mt-6">
-                    <h3 className="text-lg font-bold">Step 2: Choose Template</h3>
-                    <div className="relative w-full min-w-0 overflow-hidden">
-                      {/* Left Arrow */}
-                      <button
-                        onClick={() => scrollCarousel('left')}
-                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white border border-gray-200 rounded-full p-1.5 shadow-lg transition-all"
-                        aria-label="Scroll left"
-                      >
-                        <ChevronLeft className="w-4 h-4 text-gray-700" />
-                      </button>
-
-                      {/* Right Arrow */}
-                      <button
-                        onClick={() => scrollCarousel('right')}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white border border-gray-200 rounded-full p-1.5 shadow-lg transition-all"
-                        aria-label="Scroll right"
-                      >
-                        <ChevronRight className="w-4 h-4 text-gray-700" />
-                      </button>
-
-                      {/* Carousel Container */}
-                      <div
-                        ref={carouselRef}
-                        className="overflow-x-auto scrollbar-hide scroll-smooth snap-x snap-mandatory px-7 w-full"
-                      >
-                        <div className="flex gap-3 pb-2 px-1">
-                          {videoTemplates.map((template) => (
-                            <div
-                              key={template.id}
-                              onClick={() => setSelectedTemplate(template)}
-                              className={`flex-shrink-0 w-24 sm:w-28 snap-start cursor-pointer transition-all duration-200 ${
-                                selectedTemplate.id === template.id
-                                  ? "ring-2 ring-primary scale-105"
-                                  : "hover:scale-102"
-                              }`}
-                            >
-                              <div className="rounded-xl overflow-hidden bg-white border border-gray-200 shadow-sm group">
-                                {/* Template Video Thumbnail */}
-                                <div className="relative aspect-[9/16]">
-                                  <video
-                                    key={template.id}
-                                    src={template.thumbnailVideo}
-                                    poster={`https://picsum.photos/seed/${template.id}/200/120.jpg`}
-                                    muted
-                                    loop
-                                    playsInline
-                                    className="w-full h-full object-cover"
-                                    onMouseEnter={(e) => {
-                                      if (hoveredVideo !== template.id) {
-                                        setHoveredVideo(template.id);
-                                        const video = e.currentTarget;
-                                        video.currentTime = 0;
-                                        const playPromise = video.play();
-                                        if (playPromise !== undefined) {
-                                          playPromise.catch((err: any) => {
-                                            console.warn(`Video play error for ${template.id}:`, err);
-                                          });
-                                        }
-                                      }
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      if (hoveredVideo === template.id) {
-                                        setHoveredVideo(null);
-                                        e.currentTarget.pause();
-                                      }
-                                    }}
-                                    preload="metadata"
-                                    onError={() => {}}
-                                  />
-                                  <div className="absolute top-2 right-2">
-                                    <div className={`w-3 h-3 rounded-full border-2 border-white ${
-                                      selectedTemplate.id === template.id
-                                        ? "bg-primary"
-                                        : "bg-gray-400"
-                                    }`}></div>
-                                  </div>
-                                  {/* Play icon overlay */}
-                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                    <PlayCircle className="w-8 h-8 text-white/80" />
-                                  </div>
-                                </div>
-
-                                {/* Template Info */}
-                                <div className="p-2">
-                                  <h4 className="font-bold text-xs text-gray-900">{template.name}</h4>
-                                  <div className="flex items-center gap-1 mt-1">
-                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                                      {template.aspectRatio}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                {videoUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <button
+                      onClick={togglePlayPause}
+                      className="w-16 h-16 rounded-full bg-white/20 glass-panel border border-white/30 flex items-center justify-center text-white scale-100 hover:scale-110 duration-200"
+                    >
+                      <span className="material-symbols-outlined text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+                        {isPlaying ? "pause" : "play_arrow"}
+                      </span>
+                    </button>
                   </div>
                 )}
 
-                {/* Generate Button */}
-                {file && previewUrl && (
-                  <button
-                    onClick={handleGenerate}
-                    className="w-full mt-6 rounded-lg bg-primary px-6 py-3 text-lg font-bold text-white shadow-lg hover:bg-primary/90 transition-all"
-                  >
-                    Generate Video
-                  </button>
-                )}
+                <div className="absolute bottom-4 left-4 right-4 h-1 bg-white/30 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary transition-all duration-300" style={{ width: `${videoProgress}%` }}></div>
+                </div>
+
+                <div className="absolute top-4 right-4 bg-white/10 glass-panel px-3 py-1 rounded-full border border-white/20">
+                  <span className="font-label text-[0.6rem] font-bold text-white uppercase tracking-wider">HD 1080p</span>
+                </div>
               </div>
 
-              {/* Progress Display */}
-              {viewState === "processing" && (
-                <div className="rounded-2xl bg-white p-4 sm:p-6 shadow-xl shadow-primary/5 border border-primary/5 w-full">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-bold">Active Task</h3>
-                    <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded">ID: #PV-88291</span>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium">AI is crafting your video...</span>
-                      <span className="font-bold text-primary">{progress}%</span>
-                    </div>
-                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-primary/10">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all duration-500"
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-gray-500 italic">Processing frames and applying high-fidelity cinematic effects...</p>
-                  </div>
+              {/* Action Buttons */}
+              {videoUrl && (
+                <div className="w-full mt-8 space-y-4">
+                  <button onClick={handleShare} className="w-full editorial-gradient py-5 rounded-full text-white font-headline font-bold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95 duration-200">
+                    <span className="material-symbols-outlined">share</span>
+                    Share Remix
+                  </button>
+                  <button onClick={handleDownload} className="w-full bg-transparent border-2 border-outline-variant/30 py-5 rounded-full text-primary font-headline font-bold text-lg flex items-center justify-center gap-3 hover:bg-primary/5 transition-all active:scale-95 duration-200">
+                    <span className="material-symbols-outlined">download</span>
+                    Download Remix
+                  </button>
+                  <button onClick={resetAll} className="w-full bg-transparent border-2 border-outline-variant/30 py-5 rounded-full text-secondary font-headline font-bold text-lg flex items-center justify-center gap-3 hover:bg-surface-container transition-all active:scale-95 duration-200">
+                    <span className="material-symbols-outlined">refresh</span>
+                    Start Over
+                  </button>
                 </div>
               )}
+            </section>
+          </>
+        )}
 
-              {/* Error Display */}
-              {error && (
-                <div className="rounded-2xl bg-red-50 p-4 sm:p-6 border border-red-200 w-full">
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-500" />
-                    <p className="text-sm font-medium text-red-700">{error}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Right Column - Video Preview */}
-            <div className="lg:col-span-7 min-w-0 w-full">
-              {viewState === "result" && videoUrl ? (
-                <div className="space-y-6">
-                  <div className="overflow-hidden rounded-2xl bg-slate-900 shadow-2xl shadow-primary/20 aspect-[9/16] relative group">
-                    <div
-                      onClick={togglePlayPause}
-                      className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
-                    >
-                      {isPlaying ? (
-                        <Pause className="w-16 h-16 text-white" />
-                      ) : (
-                        <PlayCircle className="w-16 h-16 text-white" />
-                      )}
-                    </div>
-                    <video
-                      ref={videoRef}
-                      src={videoUrl}
-                      autoPlay
-                      loop
-                      playsInline
-                      muted={isMuted}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      onTimeUpdate={(e) => {
-                        const video = e.currentTarget;
-                        if (video.duration) {
-                          setVideoProgress((video.currentTime / video.duration) * 100);
-                        }
-                      }}
-                      onPlay={() => setIsPlaying(true)}
-                      onPause={() => setIsPlaying(false)}
-                    />
-                    <div className="absolute bottom-4 left-4 right-4 flex items-center gap-3 z-20">
-                      {/* Play/Pause button */}
-                      <button
-                        onClick={togglePlayPause}
-                        className="p-2 bg-black/40 hover:bg-black/60 rounded-full backdrop-blur-sm transition-all"
-                      >
-                        {isPlaying ? (
-                          <Pause className="w-4 h-4 text-white" />
-                        ) : (
-                          <PlayCircle className="w-4 h-4 text-white" />
-                        )}
-                      </button>
-                      {/* Progress bar */}
-                      <div className="flex-1 h-1 rounded-full bg-white/30 cursor-pointer" onClick={(e) => {
-                        const video = videoRef.current;
-                        if (!video) return;
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const ratio = (e.clientX - rect.left) / rect.width;
-                        video.currentTime = ratio * video.duration;
-                      }}>
-                        <div
-                          className="h-full bg-primary rounded-full transition-all duration-300"
-                          style={{ width: `${videoProgress}%` }}
-                        ></div>
-                      </div>
-                      {/* Mute button */}
-                      <button
-                        onClick={toggleMute}
-                        className="p-2 bg-black/40 hover:bg-black/60 rounded-full backdrop-blur-sm transition-all"
-                      >
-                        {isMuted ? (
-                          <span className="text-white text-xs font-bold w-4 h-4 flex items-center justify-center">🔇</span>
-                        ) : (
-                          <span className="text-white text-xs font-bold w-4 h-4 flex items-center justify-center">🔊</span>
-                        )}
-                      </button>
-                      <span className="text-[10px] font-bold text-white uppercase tracking-widest bg-black/40 px-2 py-1 rounded backdrop-blur-sm whitespace-nowrap">Preview</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleDownload}
-                        className="flex items-center gap-1.5 rounded-lg bg-white border border-primary/20 px-3 py-2.5 text-xs sm:text-sm font-bold hover:bg-primary/5"
-                      >
-                        <Download className="w-4 h-4" />
-                        Download
-                      </button>
-                      <button
-                        onClick={handleShare}
-                        className="flex items-center gap-1.5 rounded-lg bg-white border border-primary/20 px-3 py-2.5 text-xs sm:text-sm font-bold hover:bg-primary/5"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        Share
-                      </button>
-                      <button
-                        onClick={resetAll}
-                        className="flex items-center gap-1.5 rounded-lg bg-white border border-primary/20 px-3 py-2.5 text-xs sm:text-sm font-bold hover:bg-primary/5"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        Start Over
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                    <div className="rounded-xl bg-white p-2 sm:p-4 border border-primary/5">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Duration</p>
-                      <p className="font-bold">0:15s</p>
-                    </div>
-                    <div className="rounded-xl bg-white p-2 sm:p-4 border border-primary/5">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Resolution</p>
-                      <p className="font-bold">{selectedTemplate.resolution}</p>
-                    </div>
-                    <div className="rounded-xl bg-white p-2 sm:p-4 border border-primary/5">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Style</p>
-                      <p className="font-bold">{selectedTemplate.name}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-2xl bg-slate-900 shadow-2xl shadow-primary/20 aspect-[9/16] relative group">
-                  <img
-                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    alt="Video preview placeholder"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuFy1TBBPgaL-x5TPLH3M-Gxv2XEPUeYva6U4ZoYkrwAJeGhASnfLqVr_Gl3mMt4Vocqmjdk_FedE0SvZ9i9i5v25mYe6IttdZyTAf7ANc657TBhyeruezn8gGWWJDXFbLMbUuzDcOfwDpKbMX0ZA8rWB0uKwZu8lwzWxY2tA-7Stl_affDXmjK1Qy2TWMpDIBBP3b3ik90MA_lFisarU1qYLGIVVHBVo-ERtzx8nBYMbqEU8IV5m22vqHPbavYJOxFG38nZHFRQ"
-                  />
-                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-20">
-                    <span className="text-[10px] font-bold text-white uppercase tracking-widest bg-black/40 px-2 py-1 rounded backdrop-blur-sm">Preview</span>
-                  </div>
-                </div>
-              )}
+        {/* Error Display */}
+        {error && (
+          <div className="px-6">
+            <div className="rounded-2xl bg-red-50 p-6 border border-red-200">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-red-500">error</span>
+                <p className="text-sm font-medium text-red-700">{error}</p>
+              </div>
             </div>
           </div>
-        </section>
+        )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-primary/10 py-12">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="grid gap-8 grid-cols-2 md:grid-cols-4">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="font-black text-2xl text-primary">Pinkvilla</div>
-              </div>
-              <div className="flex gap-4">
-                <a className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all" href="#">
-                  <span className="text-sm">IG</span>
-                </a>
-                <a className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all" href="#">
-                  <span className="text-sm">YT</span>
-                </a>
-                <a className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all" href="#">
-                  <span className="text-sm">FB</span>
-                </a>
-                <a className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all" href="#">
-                  <span className="text-sm">X</span>
-                </a>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-bold mb-6">Explore</h4>
-              <ul className="space-y-4 text-sm text-slate-500">
-                <li><a className="hover:text-primary" href="#">Latest News</a></li>
-                <li><a className="hover:text-primary" href="#">Cinema</a></li>
-                <li><a className="hover:text-primary" href="#">Bollywood</a></li>
-                <li><a className="hover:text-primary" href="#">Fashion</a></li>
-                <li><a className="hover:text-primary" href="#">Beauty</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-6">Support</h4>
-              <ul className="space-y-4 text-sm text-slate-500">
-                <li><a className="hover:text-primary" href="#">About Us</a></li>
-                <li><a className="hover:text-primary" href="#">Privacy Policy</a></li>
-                <li><a className="hover:text-primary" href="#">Terms of Service</a></li>
-                <li><a className="hover:text-primary" href="#">Contact Us</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold mb-6">Analytics</h4>
-              <ul className="space-y-4 text-sm text-slate-500">
-                <li><a className="hover:text-primary" href="/dashboard">View Dashboard</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-12 pt-8 border-t border-primary/5 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-slate-400">
-            <p>&copy; 2024 Pinkvilla Media Private Limited. All rights reserved.</p>
-            <div className="flex gap-6"></div>
-          </div>
-        </div>
-      </footer>
+      {/* BOTTOM NAV */}
+      <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-8 pb-6 pt-3 bg-[#faf9f9]/80 backdrop-blur-xl z-50 rounded-t-3xl shadow-[0_-8px_32px_rgba(27,28,28,0.06)]" id="bottom-nav">
+        <a href="#" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="home">
+          <span className="material-symbols-outlined">home</span>
+        </a>
+        <a href="#creation-studio" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="create">
+          <span className="material-symbols-outlined">add_circle</span>
+        </a>
+        <a href="#remix-result" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="result">
+          <span className="material-symbols-outlined">person</span>
+        </a>
+      </nav>
     </div>
   );
 }

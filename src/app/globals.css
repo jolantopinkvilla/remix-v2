@@ -1,14 +1,58 @@
 @import "tailwindcss";
 
-@theme {
-  --font-display: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
-  --color-primary: #eb0089;
-  --color-background-light: #f8f5f7;
-  --color-background-dark: #230f1b;
+body {
+  background-color: #faf9f9;
+  color: #1b1c1c;
+  font-family: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
-body {
-  @apply bg-white text-slate-900 antialiased min-h-screen selection:bg-primary/20;
+body::selection {
+  background-color: #b60055;
+  color: #ffffff;
+}
+
+/* Material Symbols */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Smooth scrolling */
+html { 
+  scroll-behavior: smooth; 
+}
+
+/* Glass panel effect */
+.glass-panel {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Editorial gradient */
+.editorial-gradient {
+  background: linear-gradient(135deg, #b60055 0%, #e4006c 100%);
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Section divider */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 1rem;
+  margin: 2.5rem 0 1.5rem;
+}
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #e5bcc4, transparent);
 }
 
 /* Custom premium scrollbar */
@@ -16,10 +60,15 @@ body {
   width: 8px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  background-color: #f3f4f6;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-primary/50 rounded-full hover:bg-primary transition-colors;
+  background-color: rgba(182, 0, 85, 0.5);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #b60055;
 }
 
 /* Hide scrollbar utility */

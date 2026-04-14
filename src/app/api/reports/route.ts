@@ -1,44 +1,44 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { s3Utils } from '@/lib/s3';
 
 export async function GET() {
   try {
-    const totalVisitors = await prisma.user.count();
+    // Get today's date for analytics
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     
-    const actionsDesc = await prisma.action.groupBy({
-      by: ['type'],
-      _count: {
-        type: true,
-      },
-    });
-
-    const sources = await prisma.user.groupBy({
-      by: ['source'],
-      _count: {
-        source: true,
-      },
-    });
-
-    const actions = actionsDesc.reduce((acc, curr) => {
-      acc[curr.type] = curr._count.type;
-      return acc;
-    }, {} as Record<string, number>);
+    // Try to get cached analytics first
+    let analytics = await s3Utils.getDailyAnalytics(today);
+    
+    // If no cached analytics, generate from events
+    if (!analytics) {
+      analytics = await s3Utils.generateAnalytics(today);
+    }
 
     return NextResponse.json({
-      totalVisitors,
+      totalVisitors: analytics.totalVisitors,
       actions: {
-        visit: actions['visit'] || 0,
-        upload: actions['upload'] || 0,
-        download: actions['download'] || 0,
-        share: actions['share'] || 0,
+        visit: analytics.actions.visit || 0,
+        upload: analytics.actions.upload || 0,
+        download: analytics.actions.download || 0,
+        share: analytics.actions.share || 0,
       },
-      sources: sources.map(s => ({
+      sources: analytics.sources.map(s => ({
         source: s.source || 'direct',
-        count: s._count.source
+        count: s.count
       })),
     });
   } catch (error) {
     console.error('Reports Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    // Return default data if S3 is not available
+    return NextResponse.json({
+      totalVisitors: 0,
+      actions: {
+        visit: 0,
+        upload: 0,
+        download: 0,
+        share: 0,
+      },
+      sources: [],
+    });
   }
 }

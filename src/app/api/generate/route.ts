@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
-// Template video URLs mapping
+// Template video URLs mapping (S3 URIs)
 const templateVideos = {
-  cinematic: 'https://www.w3schools.com/html/mov_bbb.mp4',
-  social: 'https://sample-videos.com/video321/mp4/720/big_buck_bunny_720p_1mb.mp4',
-  business: 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4',
-  artistic: 'https://sample-videos.com/video321/mp4/480/big_buck_bunny_480p_1mb.mp4',
-  minimal: 'https://sample-videos.com/video123/mp4/480/big_buck_bunny_480p_1mb.mp4'
+  cinematic: 's3://pinkvilla-media-assets/videos/cinematic-template.mp4',
+  social: 's3://pinkvilla-media-assets/videos/social-template.mp4',
+  business: 's3://pinkvilla-media-assets/videos/business-template.mp4',
+  artistic: 's3://pinkvilla-media-assets/videos/artistic-template.mp4',
+  minimal: 's3://pinkvilla-media-assets/videos/minimal-template.mp4'
 };
 
 export async function POST(request: Request) {
@@ -35,10 +35,13 @@ export async function POST(request: Request) {
 
     // Return template-specific video
     const videoUrl = templateVideos[template as keyof typeof templateVideos] || templateVideos.cinematic;
+    
+    // Convert S3 URI to HTTP URL for frontend
+    const httpVideoUrl = videoUrl.replace('s3://', 'https://s3.amazonaws.com/');
 
     return NextResponse.json({ 
         success: true, 
-        videoUrl: videoUrl,
+        videoUrl: httpVideoUrl,
         template: template
     });
 
