@@ -1,4 +1,18 @@
+import { useState, useEffect } from 'react';
+
 export function useTracking() {
+  const [sessionId, setSessionId] = useState<string>('');
+
+  useEffect(() => {
+    // Get or create a sessionId stored in sessionStorage (resets when tab closes)
+    let sId = sessionStorage.getItem('img2vid_session_id');
+    if (!sId) {
+      sId = crypto.randomUUID();
+      sessionStorage.setItem('img2vid_session_id', sId);
+    }
+    setSessionId(sId);
+  }, []);
+
   const trackAction = async (type: 'visit' | 'upload' | 'download' | 'share' | 'videoGenerate') => {
     try {
       // Get or create a userId stored in localStorage to mock sessions
@@ -17,19 +31,23 @@ export function useTracking() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId, type, source: document.referrer || 'direct' }),
+        body: JSON.stringify({
+          userId,
+          type,
+          source: document.referrer || 'direct',
+          sessionId: sessionStorage.getItem('img2vid_session_id') || ''
+        }),
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
     } catch (err) {
       // Silently ignore tracking errors - they shouldn't break the app
-      // Only log in development for debugging
       if (process.env.NODE_ENV === 'development') {
         console.log('Tracking unavailable (non-critical):', err);
       }
     }
   };
 
-  return { trackAction };
+  return { trackAction, sessionId };
 }

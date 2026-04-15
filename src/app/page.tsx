@@ -48,7 +48,7 @@ export default function Home() {
   // Result visibility — hidden until user successfully triggers generation
   const [resultVisible, setResultVisible] = useState(false);
 
-  const { trackAction } = useTracking();
+  const { trackAction, sessionId } = useTracking();
   const selfieInputRef = useRef<HTMLInputElement>(null);
   const fullBodyInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,22 +156,44 @@ export default function Home() {
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
+        if (prev >= 90) return 90; // Hold at 90 until API returns
         return prev + 10;
       });
     }, 500);
 
-    setTimeout(() => {
+    try {
+      // Upload selfie first (as an example, the API currently only takes one image)
+      // In a real app, we might upload both or the API might handle both.
+      // For now, I'll follow the existing API structure which takes 'image' and 'template'.
+      const formData = new FormData();
+      formData.append('image', selfieFile);
+      formData.append('template', 'cinematic'); // Default template
+      formData.append('sessionId', sessionId);
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to generate video');
+      }
+
       clearInterval(progressInterval);
-      setVideoUrl(PREVIEW_VIDEO_URL);
+      setProgress(100);
+      setVideoUrl(data.videoUrl);
       setViewState("result");
       setIsPlaying(true);
       scrollToSection('remix-result');
       trackAction("videoGenerate");
-    }, 5000);
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setError(err.message || 'An error occurred during generation');
+      setViewState("input");
+      setResultVisible(false);
+    }
   };
 
   const handleDownload = () => {
@@ -482,9 +504,8 @@ export default function Home() {
                   return (
                     <label
                       key={bedType.id}
-                      className={`flex items-center p-4 rounded-xl shadow-sm cursor-pointer hover:bg-surface-container transition-all ring-1 ${
-                        isSelected ? 'ring-primary bg-primary/5' : 'ring-outline-variant/20 bg-surface-container-lowest'
-                      }`}
+                      className={`flex items-center p-4 rounded-xl shadow-sm cursor-pointer hover:bg-surface-container transition-all ring-1 ${isSelected ? 'ring-primary bg-primary/5' : 'ring-outline-variant/20 bg-surface-container-lowest'
+                        }`}
                     >
                       <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
                         <img className="w-full h-full object-cover" src={bedType.thumbnail.replace('s3://', 'https://s3.amazonaws.com/')} alt={bedType.name} />
