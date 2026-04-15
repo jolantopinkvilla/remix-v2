@@ -1,35 +1,17 @@
 import { NextResponse } from 'next/server';
-import { s3Utils } from '@/lib/s3';
+import { generateAnalytics } from '@/lib/dynamo';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Get today's date for analytics
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    
-    // Try to get cached analytics first
-    let analytics = await s3Utils.getDailyAnalytics(today);
-    
-    // If no cached analytics, generate from events
-    if (!analytics) {
-      analytics = await s3Utils.generateAnalytics(today);
-    }
+    const { searchParams } = new URL(request.url);
+    const range = (searchParams.get('range') || 'today') as 'today' | '7d' | '30d';
 
-    return NextResponse.json({
-      totalVisitors: analytics.totalVisitors,
-      actions: {
-        visit: analytics.actions.visit || 0,
-        upload: analytics.actions.upload || 0,
-        download: analytics.actions.download || 0,
-        share: analytics.actions.share || 0,
-      },
-      sources: analytics.sources.map(s => ({
-        source: s.source || 'direct',
-        count: s.count
-      })),
-    });
+    const analytics = await generateAnalytics(range);
+
+    return NextResponse.json(analytics);
   } catch (error) {
     console.error('Reports Error:', error);
-    // Return default data if S3 is not available
+    // Return default data if DynamoDB is not available
     return NextResponse.json({
       totalVisitors: 0,
       actions: {
@@ -37,8 +19,10 @@ export async function GET() {
         upload: 0,
         download: 0,
         share: 0,
+        videoGenerate: 0,
       },
       sources: [],
+      timeseries: [],
     });
   }
 }

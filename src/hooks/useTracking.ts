@@ -1,5 +1,5 @@
 export function useTracking() {
-  const trackAction = async (type: 'visit' | 'upload' | 'download' | 'share') => {
+  const trackAction = async (type: 'visit' | 'upload' | 'download' | 'share' | 'videoGenerate') => {
     try {
       // Get or create a userId stored in localStorage to mock sessions
       let userId = localStorage.getItem('img2vid_user_id');

@@ -127,6 +127,7 @@ export default function Home() {
         setFullBodyFile(file);
         setFullBodyPreview(URL.createObjectURL(file));
       }
+      trackAction("upload");
     }
   };
 
@@ -169,6 +170,7 @@ export default function Home() {
       setViewState("result");
       setIsPlaying(true);
       scrollToSection('remix-result');
+      trackAction("videoGenerate");
     }, 5000);
   };
 
@@ -252,6 +254,7 @@ export default function Home() {
             setFullBodyPreview(imageSrc);
             setFullBodyCameraMode(false);
           }
+          trackAction("upload");
         });
     }
   };

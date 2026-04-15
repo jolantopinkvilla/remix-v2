@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { s3Utils, User, Event } from '@/lib/s3';
+import { putEvent, putUser, getUser, type DynamoEvent, type DynamoUser } from '@/lib/dynamo';
 
 export async function POST(request: Request) {
   try {
@@ -9,45 +9,46 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing userId or type' }, { status: 400 });
     }
 
-    // Try to use S3, but fail gracefully if it's not available
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+
     try {
-      // Ensure user exists
-      let user = await s3Utils.getUser(userId);
-      
+      // Upsert user
+      let user = await getUser(userId);
+
       if (!user) {
-        user = {
-          id: userId,
+        const newUser: DynamoUser = {
+          userId,
           source: source || 'direct',
-          createdAt: new Date().toISOString(),
-          lastActive: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          lastActive: now.toISOString(),
         };
-        await s3Utils.storeUser(user);
+        await putUser(newUser);
       } else {
-        // Update last active time
-        user.lastActive = new Date().toISOString();
-        await s3Utils.storeUser(user);
+        user.lastActive = now.toISOString();
+        await putUser(user);
       }
 
       // Record event
-      const event: Event = {
-        id: crypto.randomUUID(),
-        userId: user.id,
-        type: type as 'visit' | 'upload' | 'download' | 'share',
-        timestamp: new Date().toISOString(),
-        metadata: source ? { source } : undefined,
+      const event: DynamoEvent = {
+        date: dateStr,
+        eventId: crypto.randomUUID(),
+        userId,
+        type: type as DynamoEvent['type'],
+        source: source || 'direct',
+        timestamp: now.toISOString(),
       };
-      
-      await s3Utils.storeEvent(event);
+
+      await putEvent(event);
 
       return NextResponse.json({ success: true, event });
-    } catch (s3Error) {
-      // S3 not available, but don't break the app
-      console.log('S3 tracking unavailable, continuing without tracking:', s3Error);
+    } catch (dynamoError) {
+      // DynamoDB not available — don't break the app
+      console.log('DynamoDB tracking unavailable, continuing without tracking:', dynamoError);
       return NextResponse.json({ success: true, message: 'Tracking unavailable' });
     }
   } catch (error) {
     console.error('Tracking Error:', error);
-    // Don't return error status to avoid breaking the app
     return NextResponse.json({ success: true, message: 'Tracking disabled' });
   }
 }
