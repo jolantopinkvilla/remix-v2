@@ -59,6 +59,13 @@ export default function Home() {
   const selfieWebcamRef = useRef<Webcam>(null);
   const fullBodyWebcamRef = useRef<Webcam>(null);
 
+  // Helper function to send Google Tag events
+  const sendGtagEvent = (eventName: string, params?: any) => {
+    if (typeof window !== "undefined" && (window as any).gtag) {
+      (window as any).gtag("event", eventName, params);
+    }
+  };
+
   useEffect(() => {
     trackAction("visit");
   }, []);
@@ -139,10 +146,12 @@ export default function Home() {
         setSelfieFile(file);
         setSelfiePreview(URL.createObjectURL(file));
         trackAction("upload_selfie");
+        sendGtagEvent("selfi_upload");
       } else {
         setFullBodyFile(file);
         setFullBodyPreview(URL.createObjectURL(file));
         trackAction("upload_full_body");
+        sendGtagEvent("fullbody_upload");
       }
     }
   };
@@ -170,6 +179,7 @@ export default function Home() {
 
     // Scroll to result section immediately (processing indicator lives inside it)
     scrollToSection('remix-result');
+    sendGtagEvent("generate_video");
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
@@ -235,6 +245,7 @@ export default function Home() {
 
   const handleDownload = () => {
     trackAction("download");
+    sendGtagEvent("video_download");
     if (videoUrl) {
       const a = document.createElement("a");
       a.href = videoUrl;
@@ -248,6 +259,7 @@ export default function Home() {
 
   const handleShare = async () => {
     trackAction("share");
+    sendGtagEvent("video_share");
     if (navigator.share && videoUrl) {
       try {
         await navigator.share({
@@ -282,6 +294,7 @@ export default function Home() {
     if (video) {
       video.paused ? video.play() : video.pause();
     }
+    sendGtagEvent("template_video_play_pause");
   };
 
   const resetAll = () => {
@@ -310,11 +323,13 @@ export default function Home() {
             setSelfiePreview(imageSrc);
             setSelfieCameraMode(false);
             trackAction("upload_selfie");
+            sendGtagEvent("selfi_upload");
           } else {
             setFullBodyFile(file);
             setFullBodyPreview(imageSrc);
             setFullBodyCameraMode(false);
             trackAction("upload_full_body");
+            sendGtagEvent("fullbody_upload");
           }
         });
     }
@@ -334,11 +349,15 @@ export default function Home() {
     }
 
     if (type === 'selfie') {
-      setSelfieCameraMode(!selfieCameraMode);
+      const mode = !selfieCameraMode;
+      setSelfieCameraMode(mode);
       setFullBodyCameraMode(false);
+      if (mode) sendGtagEvent("selfi_camera");
     } else {
-      setFullBodyCameraMode(!fullBodyCameraMode);
+      const mode = !fullBodyCameraMode;
+      setFullBodyCameraMode(mode);
       setSelfieCameraMode(false);
+      if (mode) sendGtagEvent("fullbody_camera");
     }
   };
 
@@ -387,7 +406,7 @@ export default function Home() {
                 {/* Remix Now CTA — top-center */}
                 <div className="absolute top-6 left-0 right-0 flex justify-center z-20">
                   <button
-                    onClick={() => scrollToSection('creation-studio')}
+                    onClick={() => { scrollToSection('creation-studio'); sendGtagEvent("create_video"); }}
                     className="px-8 py-3 rounded-full font-bold text-white text-sm tracking-wide shadow-xl"
                     style={{ background: 'linear-gradient(135deg, #b60055, #e4006c)' }}
                   >
@@ -558,6 +577,7 @@ export default function Home() {
                         onChange={() => {
                           setSelectedBedType(bedType);
                           trackAction("select_bed", { bedType: bedType.name });
+                          sendGtagEvent("bed_type", { bedType: bedType.name });
                         }}
                         className="accent-primary w-5 h-5 flex-shrink-0 cursor-pointer"
                       />
@@ -703,7 +723,7 @@ export default function Home() {
                 {videoUrl && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <button
-                      onClick={togglePlayPause}
+                      onClick={() => { togglePlayPause(); sendGtagEvent("generate_video_play_pause"); }}
                       className="w-16 h-16 rounded-full bg-white/20 glass-panel border border-white/30 flex items-center justify-center text-white scale-100 hover:scale-110 duration-200"
                     >
                       <span className="material-symbols-outlined text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -747,13 +767,13 @@ export default function Home() {
 
       {/* BOTTOM NAV */}
       <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-8 pb-6 pt-3 bg-[#faf9f9]/80 backdrop-blur-xl z-50 rounded-t-3xl shadow-[0_-8px_32px_rgba(27,28,28,0.06)]" id="bottom-nav">
-        <a href="#" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="home">
+        <a href="#" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="home" onClick={() => sendGtagEvent("home_icon")}>
           <span className="material-symbols-outlined">home</span>
         </a>
-        <a href="#creation-studio" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="create">
+        <a href="#creation-studio" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="create" onClick={() => sendGtagEvent("add_icon")}>
           <span className="material-symbols-outlined">add_circle</span>
         </a>
-        <a href="#remix-result" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="result">
+        <a href="#remix-result" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c]" data-section="result" onClick={() => sendGtagEvent("user_icon")}>
           <span className="material-symbols-outlined">person</span>
         </a>
       </nav>
