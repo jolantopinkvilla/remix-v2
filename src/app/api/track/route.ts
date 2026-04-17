@@ -3,11 +3,15 @@ import { putEvent, putUser, getUser, type DynamoEvent, type DynamoUser } from '@
 
 export async function POST(request: Request) {
   try {
-    const { userId, type, source } = await request.json();
+    const { userId, type, source, metadata } = await request.json();
 
     if (!userId || !type) {
       return NextResponse.json({ error: 'Missing userId or type' }, { status: 400 });
     }
+
+    // Capture IP address
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : (request as any).ip || '127.0.0.1';
 
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -37,6 +41,8 @@ export async function POST(request: Request) {
         type: type as DynamoEvent['type'],
         source: source || 'direct',
         timestamp: now.toISOString(),
+        ip,
+        metadata: metadata || {},
       };
 
       await putEvent(event);

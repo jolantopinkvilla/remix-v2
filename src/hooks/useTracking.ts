@@ -13,7 +13,10 @@ export function useTracking() {
     setSessionId(sId);
   }, []);
 
-  const trackAction = async (type: 'visit' | 'upload' | 'download' | 'share' | 'videoGenerate') => {
+  const trackAction = async (
+    type: 'visit' | 'upload' | 'download' | 'share' | 'videoGenerate' | 'upload_selfie' | 'upload_full_body' | 'select_bed',
+    metadata?: Record<string, unknown>
+  ) => {
     try {
       // Get or create a userId stored in localStorage to mock sessions
       let userId = localStorage.getItem('img2vid_user_id');
@@ -35,7 +38,8 @@ export function useTracking() {
           userId,
           type,
           source: document.referrer || 'direct',
-          sessionId: sessionStorage.getItem('img2vid_session_id') || ''
+          sessionId: sessionStorage.getItem('img2vid_session_id') || '',
+          metadata
         }),
         signal: controller.signal,
       });

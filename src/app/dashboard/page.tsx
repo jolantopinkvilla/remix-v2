@@ -33,12 +33,19 @@ interface ReportData {
   actions: {
     visit: number;
     upload: number;
+    upload_selfie: number;
+    upload_full_body: number;
+    select_bed: number;
     download: number;
     share: number;
     videoGenerate: number;
   };
   sources: {
     source: string;
+    count: number;
+  }[];
+  bedTypes: {
+    type: string;
     count: number;
   }[];
   timeseries: {
@@ -120,6 +127,9 @@ export default function Dashboard() {
   const totalActions =
     data.actions.visit +
     data.actions.upload +
+    data.actions.upload_selfie +
+    data.actions.upload_full_body +
+    data.actions.select_bed +
     data.actions.download +
     data.actions.share +
     data.actions.videoGenerate;
@@ -168,11 +178,10 @@ export default function Dashboard() {
             <button
               key={r}
               onClick={() => setRange(r)}
-              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
-                range === r
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${range === r
                   ? "bg-gradient-to-r from-[#b60055] to-[#e4006c] text-white shadow-lg shadow-[#e4006c]/20"
                   : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10"
-              }`}
+                }`}
             >
               {r === "today" ? "Today" : r === "7d" ? "7 Days" : "30 Days"}
             </button>
@@ -180,7 +189,7 @@ export default function Dashboard() {
         </div>
 
         {/* ── KPI Cards ──────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             title="Visitors"
             value={data.totalVisitors}
@@ -194,10 +203,25 @@ export default function Dashboard() {
             color="#8b5cf6"
           />
           <KpiCard
-            title="Uploads"
-            value={data.actions.upload}
+            title="Selfie Uploads"
+            value={data.actions.upload_selfie}
             icon={<Upload className="w-5 h-5" />}
             color="#e4006c"
+          />
+          <KpiCard
+            title="Full Body Uploads"
+            value={data.actions.upload_full_body}
+            icon={<Upload className="w-5 h-5" />}
+            color="#b60055"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <KpiCard
+            title="Bed Selections"
+            value={data.actions.select_bed}
+            icon={<Activity className="w-5 h-5" />}
+            color="#6366f1"
           />
           <KpiCard
             title="Downloads"
@@ -298,7 +322,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Bottom Row — Action Breakdown + Sources ─────────────────────── */}
+        {/* ── Bottom Row — Action Breakdown + Sources + Bed Types ─────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Action Breakdown */}
           <div className="col-span-1 lg:col-span-2 bg-[#161a25] border border-white/5 rounded-2xl p-6">
@@ -314,16 +338,28 @@ export default function Dashboard() {
                 color="#8b5cf6"
               />
               <ActionRow
-                label="Uploads & Captures"
-                count={data.actions.upload}
+                label="Selfie Uploads"
+                count={data.actions.upload_selfie}
                 total={totalActions}
                 color="#e4006c"
+              />
+              <ActionRow
+                label="Full Body Uploads"
+                count={data.actions.upload_full_body}
+                total={totalActions}
+                color="#b60055"
+              />
+              <ActionRow
+                label="Bed Selections"
+                count={data.actions.select_bed}
+                total={totalActions}
+                color="#6366f1"
               />
               <ActionRow
                 label="Video Generations"
                 count={data.actions.videoGenerate}
                 total={totalActions}
-                color="#6366f1"
+                color="#3b82f6"
               />
               <ActionRow
                 label="Downloads"
@@ -340,48 +376,92 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Traffic Sources */}
-          <div className="bg-[#161a25] border border-white/5 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold mb-6 flex items-center gap-2 text-white">
-              <Globe className="w-5 h-5 text-[#3b82f6]" />
-              Traffic Sources
-            </h3>
+          <div className="space-y-6">
+            {/* Traffic Sources */}
+            <div className="bg-[#161a25] border border-white/5 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold mb-6 flex items-center gap-2 text-white">
+                <Globe className="w-5 h-5 text-[#3b82f6]" />
+                Traffic Sources
+              </h3>
 
-            {data.sources.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-gray-600">
-                <Globe className="w-10 h-10 mb-3 opacity-40" />
-                <p className="text-sm">No source data yet</p>
-              </div>
-            ) : (
-              <ul className="space-y-3">
-                {data.sources
-                  .sort((a, b) => b.count - a.count)
-                  .map((item, i) => {
-                    const maxCount = data.sources[0]?.count || 1;
-                    const pct = Math.round((item.count / maxCount) * 100);
-                    return (
-                      <li
-                        key={i}
-                        className="relative p-3.5 rounded-xl bg-white/[0.03] border border-white/5 overflow-hidden"
-                      >
-                        {/* Background bar */}
-                        <div
-                          className="absolute inset-y-0 left-0 bg-[#3b82f6]/10 transition-all duration-700"
-                          style={{ width: `${pct}%` }}
-                        />
-                        <div className="relative flex items-center justify-between">
-                          <span className="font-medium text-gray-300 capitalize text-sm truncate max-w-[160px]">
-                            {item.source}
-                          </span>
-                          <span className="text-sm font-semibold text-[#3b82f6]">
-                            {item.count}
-                          </span>
-                        </div>
-                      </li>
-                    );
-                  })}
-              </ul>
-            )}
+              {data.sources.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-600">
+                  <Globe className="w-10 h-10 mb-3 opacity-40" />
+                  <p className="text-sm">No source data yet</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {data.sources
+                    .sort((a, b) => b.count - a.count)
+                    .map((item, i) => {
+                      const maxCount = data.sources[0]?.count || 1;
+                      const pct = Math.round((item.count / maxCount) * 100);
+                      return (
+                        <li
+                          key={i}
+                          className="relative p-3.5 rounded-xl bg-white/[0.03] border border-white/5 overflow-hidden"
+                        >
+                          <div
+                            className="absolute inset-y-0 left-0 bg-[#3b82f6]/10 transition-all duration-700"
+                            style={{ width: `${pct}%` }}
+                          />
+                          <div className="relative flex items-center justify-between">
+                            <span className="font-medium text-gray-300 capitalize text-sm truncate max-w-[160px]">
+                              {item.source}
+                            </span>
+                            <span className="text-sm font-semibold text-[#3b82f6]">
+                              {item.count}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
+
+            {/* Bed Type Popularity */}
+            <div className="bg-[#161a25] border border-white/5 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold mb-6 flex items-center gap-2 text-white">
+                <Video className="w-5 h-5 text-[#e4006c]" />
+                Bed Popularity
+              </h3>
+
+              {data.bedTypes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-600">
+                  <Video className="w-10 h-10 mb-3 opacity-40" />
+                  <p className="text-sm">No bed data yet</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {data.bedTypes
+                    .sort((a, b) => b.count - a.count)
+                    .map((item, i) => {
+                      const maxCount = data.bedTypes[0]?.count || 1;
+                      const pct = Math.round((item.count / maxCount) * 100);
+                      return (
+                        <li
+                          key={i}
+                          className="relative p-3.5 rounded-xl bg-white/[0.03] border border-white/5 overflow-hidden"
+                        >
+                          <div
+                            className="absolute inset-y-0 left-0 bg-[#e4006c]/10 transition-all duration-700"
+                            style={{ width: `${pct}%` }}
+                          />
+                          <div className="relative flex items-center justify-between">
+                            <span className="font-medium text-gray-300 capitalize text-sm truncate max-w-[160px]">
+                              {item.type}
+                            </span>
+                            <span className="text-sm font-semibold text-[#e4006c]">
+                              {item.count}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       </div>

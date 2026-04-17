@@ -39,6 +39,7 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
+  const [debugMode, setDebugMode] = useState(false);
 
   // Camera states
   const [selfieCameraMode, setSelfieCameraMode] = useState(false);
@@ -100,6 +101,20 @@ export default function Home() {
     return () => window.removeEventListener('scroll', updateActiveNav);
   }, []);
 
+  // Add beforeunload listener to prevent accidental navigation during processing
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (viewState === "processing") {
+        e.preventDefault();
+        e.returnValue = "Your video is still generating. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [viewState]);
+
   const scrollToSection = (id: string) => {
     setTimeout(() => {
       const el = document.getElementById(id);
@@ -123,11 +138,12 @@ export default function Home() {
       if (type === 'selfie') {
         setSelfieFile(file);
         setSelfiePreview(URL.createObjectURL(file));
+        trackAction("upload_selfie");
       } else {
         setFullBodyFile(file);
         setFullBodyPreview(URL.createObjectURL(file));
+        trackAction("upload_full_body");
       }
-      trackAction("upload");
     }
   };
 
@@ -135,6 +151,7 @@ export default function Home() {
     if (type === 'selfie') {
       setSelfieFile(null);
       setSelfiePreview(null);
+
       if (selfieInputRef.current) selfieInputRef.current.value = "";
     } else {
       setFullBodyFile(null);
@@ -156,43 +173,63 @@ export default function Home() {
 
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 90) return 90; // Hold at 90 until API returns
-        return prev + 10;
+        if (prev >= 98) return 98; // Hold at 98% until API returns
+        // 5-7 minutes = 300-420 seconds. 
+        // We'll increment by ~0.25% every second to reach ~90% in 6 minutes.
+        return prev + 0.25;
       });
-    }, 500);
+    }, 1000);
 
     try {
-      // Upload selfie first (as an example, the API currently only takes one image)
-      // In a real app, we might upload both or the API might handle both.
-      // For now, I'll follow the existing API structure which takes 'image' and 'template'.
-      const formData = new FormData();
-      formData.append('image', selfieFile);
-      formData.append('template', 'cinematic'); // Default template
-      formData.append('sessionId', sessionId);
+      // 1. Call the Scrolo API directly from the browser for maximum visibility and long-wait handling
+      const backendUrl = debugMode 
+        ? 'https://fastapi.pinkvilla.com/v1/scrolo/failure'
+        : 'https://fastapi.pinkvilla.com/v1/scrolo/success';
 
-      const response = await fetch('/api/generate', {
+      console.log(`[Client] Initiating generation at: ${backendUrl}`);
+      
+      const response = await fetch(backendUrl, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+        mode: 'cors'
       });
 
       const data = await response.json();
+      console.log(`[Client] Scrolo API Response:`, data);
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate video');
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || 'We encountered an issue processing your request. Please try again.');
+      }
+
+      // 2. Generation successful! Now retrieve the presigned video playback link from our local API
+      const videoResponse = await fetch('/api/generate');
+      const videoData = await videoResponse.json();
+
+      if (!videoResponse.ok || !videoData.success) {
+        throw new Error('Video generated successfully, but we encountered an issue retrieving the playback link.');
       }
 
       clearInterval(progressInterval);
       setProgress(100);
-      setVideoUrl(data.videoUrl);
+      setVideoUrl(videoData.videoUrl);
       setViewState("result");
       setIsPlaying(true);
       scrollToSection('remix-result');
       trackAction("videoGenerate");
     } catch (err: any) {
       clearInterval(progressInterval);
-      setError(err.message || 'An error occurred during generation');
+      
+      // Specifically handle the case where the API returns success: false with a message
+      const errorMessage = err.message || 'We encountered an unexpected error. Please check your connection and try again.';
+      setError(errorMessage);
+      
       setViewState("input");
       setResultVisible(false);
+      
+      // Removed window.scrollTo as requested. The error is now displayed below the generate button.
     }
   };
 
@@ -202,6 +239,7 @@ export default function Home() {
       const a = document.createElement("a");
       a.href = videoUrl;
       a.download = "pinkvilla-remix-video.mp4";
+      a.target = "_blank"; // Prevent navigating away from the app
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -271,12 +309,13 @@ export default function Home() {
             setSelfieFile(file);
             setSelfiePreview(imageSrc);
             setSelfieCameraMode(false);
+            trackAction("upload_selfie");
           } else {
             setFullBodyFile(file);
             setFullBodyPreview(imageSrc);
             setFullBodyCameraMode(false);
+            trackAction("upload_full_body");
           }
-          trackAction("upload");
         });
     }
   };
@@ -352,7 +391,7 @@ export default function Home() {
                     className="px-8 py-3 rounded-full font-bold text-white text-sm tracking-wide shadow-xl"
                     style={{ background: 'linear-gradient(135deg, #b60055, #e4006c)' }}
                   >
-                    ✨ Remix Now
+                    Remix Now
                   </button>
                 </div>
               </div>
@@ -516,7 +555,10 @@ export default function Home() {
                         name="video_base"
                         value={bedType.id}
                         checked={isSelected}
-                        onChange={() => setSelectedBedType(bedType)}
+                        onChange={() => {
+                          setSelectedBedType(bedType);
+                          trackAction("select_bed", { bedType: bedType.name });
+                        }}
                         className="accent-primary w-5 h-5 flex-shrink-0 cursor-pointer"
                       />
                     </label>
@@ -535,10 +577,46 @@ export default function Home() {
                 <span>Generate your Remix Video</span>
                 <span className="material-symbols-outlined">auto_awesome</span>
               </button>
-              <p className="text-center mt-4 text-secondary text-[11px] uppercase tracking-widest font-bold opacity-60">Est. processing time: 5-7 minutes</p>
+              {/* Error Display - Now located here for immediate visibility */}
+              {error && (
+                <div className="mt-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div className="rounded-2xl bg-red-50 p-6 border border-red-200 shadow-sm relative">
+                    <button 
+                      onClick={() => setError(null)}
+                      className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                    <div className="flex items-start gap-3 text-left">
+                      <span className="material-symbols-outlined text-red-500 mt-0.5">error</span>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-red-800">Generation Failed</p>
+                        <p className="text-sm font-medium text-red-700 leading-relaxed">{error}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Debug Toggle */}
+              <div className="mt-8 flex items-center justify-center gap-2">
+                <button 
+                  onClick={() => setDebugMode(!debugMode)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-[10px] font-bold uppercase tracking-wider ${
+                    debugMode 
+                      ? 'bg-red-50 border-red-200 text-red-600' 
+                      : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-xs">bug_report</span>
+                  {debugMode ? 'Test Failure Mode: ON' : 'Normal Mode'}
+                </button>
+              </div>
             </div>
           </div>
         </section>
+
+        {/* Removed redundant Error Display from bottom */}
 
         {/* RESULT SECTION — only rendered after Generate is clicked */}
         {resultVisible && (
@@ -567,14 +645,20 @@ export default function Home() {
                       <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded">ID: #PV-88291</span>
                     </div>
                     <div className="space-y-4">
+                      {/* Tab preservation warning */}
+                      <div className="flex items-center gap-3 bg-blue-50/50 p-3 rounded-xl border border-blue-100 mb-2 animate-pulse">
+                        <span className="material-symbols-outlined text-blue-500 text-sm">info</span>
+                        <p className="text-[11px] font-medium text-blue-700">Please keep this tab open. Navigating away or closing the tab will cancel the generation.</p>
+                      </div>
+
                       <div className="flex justify-between text-sm">
                         <span className="font-medium">AI is crafting your video...</span>
-                        <span className="font-bold text-primary">{progress}%</span>
+                        <span className="font-bold text-primary">{Math.round(progress)}%</span>
                       </div>
                       <div className="h-2.5 w-full overflow-hidden rounded-full bg-primary/10">
                         <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }}></div>
                       </div>
-                      <p className="text-xs text-gray-500 italic">Processing frames and applying high-fidelity cinematic effects...</p>
+                      <p className="text-xs text-gray-500 italic">This typically takes 5-7 minutes. Perfection takes time!</p>
                     </div>
                   </div>
                 </div>
@@ -659,17 +743,6 @@ export default function Home() {
           </>
         )}
 
-        {/* Error Display */}
-        {error && (
-          <div className="px-6">
-            <div className="rounded-2xl bg-red-50 p-6 border border-red-200">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-red-500">error</span>
-                <p className="text-sm font-medium text-red-700">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* BOTTOM NAV */}

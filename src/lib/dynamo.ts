@@ -36,9 +36,10 @@ export interface DynamoEvent {
   date: string;       // partition key: YYYY-MM-DD
   eventId: string;    // sort key: unique id
   userId: string;
-  type: 'visit' | 'upload' | 'download' | 'share' | 'videoGenerate';
+  type: 'visit' | 'upload' | 'download' | 'share' | 'videoGenerate' | 'upload_selfie' | 'upload_full_body' | 'select_bed';
   source: string;
   timestamp: string;  // ISO string
+  ip?: string;        // User IP address
   metadata?: Record<string, unknown>;
 }
 
@@ -47,11 +48,15 @@ export interface AnalyticsReport {
   actions: {
     visit: number;
     upload: number;
+    upload_selfie: number;
+    upload_full_body: number;
+    select_bed: number;
     download: number;
     share: number;
     videoGenerate: number;
   };
   sources: Array<{ source: string; count: number }>;
+  bedTypes: Array<{ type: string; count: number }>;
   timeseries: Array<{
     date: string;
     visits: number;
@@ -149,8 +154,18 @@ export async function generateAnalytics(
 
   // Aggregate
   const uniqueUsers = new Set<string>();
-  const actions = { visit: 0, upload: 0, download: 0, share: 0, videoGenerate: 0 };
+  const actions = {
+    visit: 0,
+    upload: 0,
+    upload_selfie: 0,
+    upload_full_body: 0,
+    select_bed: 0,
+    download: 0,
+    share: 0,
+    videoGenerate: 0
+  };
   const sourceMap: Record<string, number> = {};
+  const bedTypeMap: Record<string, number> = {};
   const dayMap: Record<string, { visits: number; uploads: number; downloads: number; shares: number }> = {};
 
   // Pre-fill dayMap with all dates in range
@@ -166,6 +181,17 @@ export async function generateAnalytics(
       actions[event.type as keyof typeof actions]++;
     }
 
+    // Legacy 'upload' event also counts towards total uploads in timeseries
+    if (event.type === 'upload' || event.type === 'upload_selfie' || event.type === 'upload_full_body') {
+      const day = event.date;
+      if (dayMap[day]) dayMap[day].uploads++;
+    }
+
+    if (event.type === 'select_bed' && event.metadata?.bedType) {
+      const bedType = String(event.metadata.bedType);
+      bedTypeMap[bedType] = (bedTypeMap[bedType] || 0) + 1;
+    }
+
     const src = event.source || 'direct';
     sourceMap[src] = (sourceMap[src] || 0) + 1;
 
@@ -173,7 +199,6 @@ export async function generateAnalytics(
     const day = event.date;
     if (dayMap[day]) {
       if (event.type === 'visit') dayMap[day].visits++;
-      if (event.type === 'upload') dayMap[day].uploads++;
       if (event.type === 'download') dayMap[day].downloads++;
       if (event.type === 'share') dayMap[day].shares++;
     }
@@ -181,6 +206,10 @@ export async function generateAnalytics(
 
   const sources = Object.entries(sourceMap)
     .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const bedTypes = Object.entries(bedTypeMap)
+    .map(([type, count]) => ({ type, count }))
     .sort((a, b) => b.count - a.count);
 
   const timeseries = dates.map((date) => ({
@@ -192,6 +221,7 @@ export async function generateAnalytics(
     totalVisitors: uniqueUsers.size,
     actions,
     sources,
+    bedTypes,
     timeseries,
   };
 }
