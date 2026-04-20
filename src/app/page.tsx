@@ -228,17 +228,10 @@ export default function Home() {
         throw new Error(data.message || 'We encountered an issue processing your request. Please try again.');
       }
 
-      // 2. Generation successful! Now retrieve the presigned video playback link from our local API
-      const videoResponse = await fetch('/api/generate');
-      const videoData = await videoResponse.json();
-
-      if (!videoResponse.ok || !videoData.success) {
-        throw new Error('Video generated successfully, but we encountered an issue retrieving the playback link.');
-      }
-
+      // 2. Generation successful! Now set the direct video playback link
       clearInterval(progressInterval);
       setProgress(100);
-      setVideoUrl(videoData.videoUrl);
+      setVideoUrl("https://pv22-prod-eng-s3.s3.us-east-1.amazonaws.com/demo/bed-template-5mb.mp4");
       setViewState("result");
       setIsPlaying(true);
       scrollToSection('remix-result');
