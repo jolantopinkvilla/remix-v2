@@ -412,7 +412,7 @@ export default function Home() {
 
                 {/* Play/Pause toggle — bottom-left */}
                 <button
-                  id="toggleBtn"
+                  id="template_video_play_pause"
                   onClick={togglePreviewPlayPause}
                   className="absolute bottom-4 left-4 bg-black/60 text-white border-none p-3 rounded-full cursor-pointer text-lg z-10 pointer-events-auto gtm-event-template_video_play_pause"
                 >
@@ -422,6 +422,7 @@ export default function Home() {
                 {/* Remix Now CTA — top-center */}
                 <div className="absolute top-6 left-0 right-0 flex justify-center z-20">
                   <button
+                    id="create_video"
                     onClick={() => { scrollToSection('creation-studio'); sendGtagEvent("create_video"); }}
                     className="px-8 py-3 rounded-full font-bold text-white text-sm tracking-wide shadow-xl gtm-event-create_video"
                     style={{ background: 'linear-gradient(135deg, #b60055, #e4006c)' }}
@@ -453,6 +454,7 @@ export default function Home() {
                 <div className="absolute top-4 inset-x-0 z-30 flex justify-center" onClick={(e) => e.stopPropagation()}>
                   <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-full shadow-sm border border-outline-variant/20">
                     <button
+                      id="selfi_upload"
                       onClick={() => { setSelfieCameraMode(false); selfieInputRef.current?.click(); }}
                       // FIX 3: CSS class updated from gtm-event-selfi_upload to gtm-event-selfie_upload
                       className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-selfie_upload ${!selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
@@ -517,11 +519,13 @@ export default function Home() {
                 <div className="absolute top-4 inset-x-0 z-30 flex justify-center" onClick={(e) => e.stopPropagation()}>
                   <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-full shadow-sm border border-outline-variant/20">
                     <button
+                      id="fullbody_upload"
                       onClick={() => { setFullBodyCameraMode(false); fullBodyInputRef.current?.click(); }}
                       className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-fullbody_upload ${!fullBodyCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
                       type="button"
                     >Upload</button>
                     <button
+                      id="fullbody_camera"
                       onClick={() => toggleCameraMode('fullBody')}
                       className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-fullbody_camera ${fullBodyCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
                       type="button"
@@ -580,6 +584,7 @@ export default function Home() {
                   return (
                     <label
                       key={bedType.id}
+                      id="bed_type_selected"
                       className={`flex items-center p-4 rounded-xl shadow-sm cursor-pointer hover:bg-surface-container transition-all ring-1 gtm-event-bed_type_selected ${isSelected ? 'ring-primary bg-primary/5' : 'ring-outline-variant/20 bg-surface-container-lowest'
                         }`}
                     >
@@ -609,6 +614,7 @@ export default function Home() {
             {/* Generate CTA */}
             <div className="pt-2 pb-4">
               <button
+                id="generate_video"
                 onClick={handleGenerate}
                 disabled={!selfieFile || !fullBodyFile}
                 className="w-full py-5 rounded-xl editorial-gradient text-white font-bold text-lg shadow-lg shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed gtm-event-generate_video"
@@ -642,8 +648,8 @@ export default function Home() {
                 <button
                   onClick={() => setDebugMode(!debugMode)}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-[10px] font-bold uppercase tracking-wider ${debugMode
-                      ? 'bg-red-50 border-red-200 text-red-600'
-                      : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-gray-600'
+                    ? 'bg-red-50 border-red-200 text-red-600'
+                    : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-gray-600'
                     }`}
                 >
                   <span className="material-symbols-outlined text-xs">bug_report</span>
@@ -747,6 +753,7 @@ export default function Home() {
                 {videoUrl && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <button
+                      id="generate_video_play_pause"
                       onClick={() => { togglePlayPause(); sendGtagEvent("generate_video_play_pause"); }}
                       className="w-16 h-16 rounded-full bg-white/20 glass-panel border border-white/30 flex items-center justify-center text-white scale-100 hover:scale-110 duration-200 gtm-event-generate_video_play_pause"
                     >
@@ -769,11 +776,11 @@ export default function Home() {
               {/* Action Buttons */}
               {videoUrl && (
                 <div className="w-full mt-8 space-y-4">
-                  <button onClick={handleShare} className="w-full editorial-gradient py-5 rounded-full text-white font-headline font-bold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95 duration-200 gtm-event-video_share">
+                  <button id="video_share" onClick={handleShare} className="w-full editorial-gradient py-5 rounded-full text-white font-headline font-bold text-lg flex items-center justify-center gap-3 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95 duration-200 gtm-event-video_share">
                     <span className="material-symbols-outlined">share</span>
                     Share Remix
                   </button>
-                  <button onClick={handleDownload} className="w-full bg-transparent border-2 border-outline-variant/30 py-5 rounded-full text-primary font-headline font-bold text-lg flex items-center justify-center gap-3 hover:bg-primary/5 transition-all active:scale-95 duration-200 gtm-event-video_download">
+                  <button id="video_download" onClick={handleDownload} className="w-full bg-transparent border-2 border-outline-variant/30 py-5 rounded-full text-primary font-headline font-bold text-lg flex items-center justify-center gap-3 hover:bg-primary/5 transition-all active:scale-95 duration-200 gtm-event-video_download">
                     <span className="material-symbols-outlined">download</span>
                     Download Remix
                   </button>
@@ -791,13 +798,13 @@ export default function Home() {
 
       {/* BOTTOM NAV */}
       <nav className="fixed bottom-0 left-0 w-full flex justify-around items-center px-8 pb-6 pt-3 bg-[#faf9f9]/80 backdrop-blur-xl z-50 rounded-t-3xl shadow-[0_-8px_32px_rgba(27,28,28,0.06)]" id="bottom-nav">
-        <a href="#" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c] gtm-event-home_icon" data-section="home" onClick={() => sendGtagEvent("home_icon")}>
+        <a href="#" id="home_icon" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c] gtm-event-home_icon" data-section="home" onClick={() => sendGtagEvent("home_icon")}>
           <span className="material-symbols-outlined">home</span>
         </a>
-        <a href="#creation-studio" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c] gtm-event-add_icon" data-section="create" onClick={() => sendGtagEvent("add_icon")}>
+        <a href="#creation-studio" id="add_icon" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c] gtm-event-add_icon" data-section="create" onClick={() => sendGtagEvent("add_icon")}>
           <span className="material-symbols-outlined">add_circle</span>
         </a>
-        <a href="#remix-result" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c] gtm-event-user_icon" data-section="result" onClick={() => sendGtagEvent("user_icon")}>
+        <a href="#remix-result" id="user_icon" className="nav-item flex flex-col items-center justify-center p-3 rounded-full scale-90 duration-300 transition-all text-[#1b1c1c] gtm-event-user_icon" data-section="result" onClick={() => sendGtagEvent("user_icon")}>
           <span className="material-symbols-outlined">person</span>
         </a>
       </nav>
