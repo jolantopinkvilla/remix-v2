@@ -1,4 +1,4 @@
-import { uploadFile, getPresignedUrl } from '../src/lib/s3';
+import { uploadFile } from '../src/lib/s3';
 
 async function testS3() {
     console.log('Testing S3 operations...');
@@ -15,22 +15,8 @@ async function testS3() {
         console.log('Upload successful!');
         console.log('S3 URI:', s3Uri);
 
-        // Test Presigned URL
-        console.log('\n2. Testing Presigned URL...');
-        const presignedUrl = await getPresignedUrl(s3Uri);
-        console.log('Presigned URL generated successfully!');
-        console.log('Presigned URL:', presignedUrl);
-
-        // Test accessibility (optional, but good to know)
-        console.log('\n3. Testing Accessibility...');
-        const response = await fetch(presignedUrl);
-        if (response.ok) {
-            console.log('Presigned URL is accessible!');
-            const text = await response.text();
-            console.log('Content:', text);
-        } else {
-            console.error('Presigned URL is NOT accessible. Status:', response.status);
-        }
+        // Accessibility test is removed because we no longer generate presigned URLs 
+        // and the bucket is likely private by default.
 
     } catch (error) {
         console.error('S3 operations failed:');
