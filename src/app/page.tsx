@@ -702,6 +702,12 @@ export default function Home() {
                     }}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
+                    onError={(e) => {
+                      console.error("Video loading error:", e);
+                      setError("Failed to load the generated video. This may be due to an expired link or temporary S3 connectivity issue.");
+                      setViewState("input");
+                      setResultVisible(false);
+                    }}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-surface-container-low">

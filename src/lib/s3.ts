@@ -1,18 +1,14 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-// Initialize S3 client with credentials from environment variables only
+// Initialize S3 client using the default credential provider chain.
+// On EC2, this will automatically pick up credentials from the IAM Instance Profile.
+// Locally, it will use environment variables or ~/.aws/credentials.
 export const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'us-east-1',
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-  },
 });
 
-export const BUCKET_NAME = (process.env.S3_BUCKET_NAME && process.env.S3_BUCKET_NAME !== 'pv22-prod-eng')
-  ? process.env.S3_BUCKET_NAME
-  : 'pv22-prod-eng-s3';
+export const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'pv22-prod-eng-s3';
 
 // Helper function to convert S3 URI to HTTP URL
 export const getS3Url = (s3Uri: string): string => {
