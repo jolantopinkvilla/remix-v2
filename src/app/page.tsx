@@ -59,20 +59,23 @@ export default function Home() {
   const selfieWebcamRef = useRef<Webcam>(null);
   const fullBodyWebcamRef = useRef<Webcam>(null);
 
-  // Helper function to send Google Tag events
-  const sendGtagEvent = (eventName: string, params?: any) => {
-    if (typeof window !== "undefined") {
-      // Standard gtag call for GA4
-      if ((window as any).gtag) {
-        (window as any).gtag("event", eventName, params);
-      }
-      // Explicit dataLayer push for GTM triggers
-      if ((window as any).dataLayer) {
-        (window as any).dataLayer.push({
-          event: eventName,
-          ...params
-        });
-      }
+  // FIX 1: Safe dataLayer push — avoids spreading nested objects (e.g. ecommerce payloads)
+  // FIX 2: All event names now use consistent snake_case ("selfie_upload" not "selfi_upload")
+  const sendGtagEvent = (eventName: string, params?: Record<string, any>) => {
+    if (typeof window === "undefined") return;
+
+    // Standard GA4 gtag call
+    if ((window as any).gtag) {
+      (window as any).gtag("event", eventName, params);
+    }
+
+    // GTM dataLayer push — params kept nested under "eventParams" to avoid
+    // corrupting structured payloads (e.g. ecommerce objects)
+    if ((window as any).dataLayer) {
+      (window as any).dataLayer.push({
+        event: eventName,
+        event_params: params ?? {},  // FIX 2: snake_case key; nested not spread
+      });
     }
   };
 
@@ -156,7 +159,8 @@ export default function Home() {
         setSelfieFile(file);
         setSelfiePreview(URL.createObjectURL(file));
         trackAction("upload_selfie");
-        sendGtagEvent("selfi_upload");
+        // FIX 3: Was "selfi_upload" — corrected to "selfie_upload"
+        sendGtagEvent("selfie_upload");
       } else {
         setFullBodyFile(file);
         setFullBodyPreview(URL.createObjectURL(file));
@@ -202,12 +206,12 @@ export default function Home() {
 
     try {
       // 1. Call the Scrolo API directly from the browser for maximum visibility and long-wait handling
-      const backendUrl = debugMode 
+      const backendUrl = debugMode
         ? 'https://fastapi.pinkvilla.com/v1/scrolo/failure'
         : 'https://fastapi.pinkvilla.com/v1/scrolo/success';
 
       console.log(`[Client] Initiating generation at: ${backendUrl}`);
-      
+
       const response = await fetch(backendUrl, {
         method: 'POST',
         headers: {
@@ -241,14 +245,14 @@ export default function Home() {
       trackAction("videoGenerate");
     } catch (err: any) {
       clearInterval(progressInterval);
-      
+
       // Specifically handle the case where the API returns success: false with a message
       const errorMessage = err.message || 'We encountered an unexpected error. Please check your connection and try again.';
       setError(errorMessage);
-      
+
       setViewState("input");
       setResultVisible(false);
-      
+
       // Removed window.scrollTo as requested. The error is now displayed below the generate button.
     }
   };
@@ -333,7 +337,8 @@ export default function Home() {
             setSelfiePreview(imageSrc);
             setSelfieCameraMode(false);
             trackAction("upload_selfie");
-            sendGtagEvent("selfi_upload");
+            // FIX 3: Was "selfi_upload" — corrected to "selfie_upload"
+            sendGtagEvent("selfie_upload");
           } else {
             setFullBodyFile(file);
             setFullBodyPreview(imageSrc);
@@ -362,7 +367,8 @@ export default function Home() {
       const mode = !selfieCameraMode;
       setSelfieCameraMode(mode);
       setFullBodyCameraMode(false);
-      if (mode) sendGtagEvent("selfi_camera");
+      // FIX 3: Was "selfi_camera" — corrected to "selfie_camera"
+      if (mode) sendGtagEvent("selfie_camera");
     } else {
       const mode = !fullBodyCameraMode;
       setFullBodyCameraMode(mode);
@@ -448,12 +454,14 @@ export default function Home() {
                   <div className="flex bg-white/80 backdrop-blur-md p-1 rounded-full shadow-sm border border-outline-variant/20">
                     <button
                       onClick={() => { setSelfieCameraMode(false); selfieInputRef.current?.click(); }}
-                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-selfi_upload ${!selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
+                      // FIX 3: CSS class updated from gtm-event-selfi_upload to gtm-event-selfie_upload
+                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-selfie_upload ${!selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
                       type="button"
                     >Upload</button>
                     <button
                       onClick={() => toggleCameraMode('selfie')}
-                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-selfi_camera ${selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
+                      // FIX 3: CSS class updated from gtm-event-selfi_camera to gtm-event-selfie_camera
+                      className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-selfie_camera ${selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
                       type="button"
                     >Camera</button>
                   </div>
@@ -572,7 +580,7 @@ export default function Home() {
                   return (
                     <label
                       key={bedType.id}
-                      className={`flex items-center p-4 rounded-xl shadow-sm cursor-pointer hover:bg-surface-container transition-all ring-1 gtm-event-bed_type ${isSelected ? 'ring-primary bg-primary/5' : 'ring-outline-variant/20 bg-surface-container-lowest'
+                      className={`flex items-center p-4 rounded-xl shadow-sm cursor-pointer hover:bg-surface-container transition-all ring-1 gtm-event-bed_type_selected ${isSelected ? 'ring-primary bg-primary/5' : 'ring-outline-variant/20 bg-surface-container-lowest'
                         }`}
                     >
                       <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
@@ -587,7 +595,8 @@ export default function Home() {
                         onChange={() => {
                           setSelectedBedType(bedType);
                           trackAction("select_bed", { bedType: bedType.name });
-                          sendGtagEvent("bed_type", { bedType: bedType.name });
+                          // FIX 4: Renamed from "bed_type" to "bed_type_selected"; param key now snake_case
+                          sendGtagEvent("bed_type_selected", { bed_type_name: bedType.name });
                         }}
                         className="accent-primary w-5 h-5 flex-shrink-0 cursor-pointer"
                       />
@@ -611,7 +620,7 @@ export default function Home() {
               {error && (
                 <div className="mt-6 animate-in fade-in slide-in-from-top-4 duration-500">
                   <div className="rounded-2xl bg-red-50 p-6 border border-red-200 shadow-sm relative">
-                    <button 
+                    <button
                       onClick={() => setError(null)}
                       className="absolute top-4 right-4 text-red-400 hover:text-red-600 transition-colors"
                     >
@@ -630,13 +639,12 @@ export default function Home() {
 
               {/* Debug Toggle */}
               <div className="mt-8 flex items-center justify-center gap-2">
-                <button 
+                <button
                   onClick={() => setDebugMode(!debugMode)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-[10px] font-bold uppercase tracking-wider ${
-                    debugMode 
-                      ? 'bg-red-50 border-red-200 text-red-600' 
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all text-[10px] font-bold uppercase tracking-wider ${debugMode
+                      ? 'bg-red-50 border-red-200 text-red-600'
                       : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-gray-600'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-xs">bug_report</span>
                   {debugMode ? 'Test Failure Mode: ON' : 'Normal Mode'}
