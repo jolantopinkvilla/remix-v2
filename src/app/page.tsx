@@ -455,6 +455,7 @@ export default function Home() {
                     >Upload</button>
                     <button
                       onClick={() => toggleCameraMode('selfie')}
+                      id="selfi_camera"
                       // FIX 3: CSS class updated from gtm-event-selfi_camera to gtm-event-selfie_camera
                       className={`px-6 py-1.5 rounded-full text-xs font-bold transition-all gtm-event-selfie_camera ${selfieCameraMode ? 'bg-primary text-[#b60055] shadow-sm' : 'text-black'}`}
                       type="button"
@@ -588,6 +589,7 @@ export default function Home() {
                       <input
                         type="radio"
                         name="video_base"
+                        id="bed_type"
                         value={bedType.id}
                         checked={isSelected}
                         onChange={() => {
